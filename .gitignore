@@ -1,0 +1,29 @@
+# Native builds and compiled extensions
+build/
+cmake-build-*/
+*.so
+*.dylib
+*.dll
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local datasets and generated artifacts
+data/raw/*
+!data/raw/AGENTS.md
+data/processed/*
+!data/processed/AGENTS.md
+results/checkpoints/
+results/runs/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
