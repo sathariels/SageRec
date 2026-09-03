@@ -5,4 +5,6 @@ CTest. Prefer tiny graphs whose CSR arrays can be checked exactly. Every bug fix
 requires a regression test. Performance thresholds do not belong in unit tests;
 benchmarks record measurements without making fragile machine-dependent assertions.
 
-Test temporary files must use isolated temporary directories and clean themselves up.
+Cover construction, duplicate-edge dedupe, isolated nodes, `k = 0`, `k >= degree`,
+invalid IDs, and seed reproducibility. Test temporary files must use isolated
+temporary directories and clean themselves up. Do not vendor MovieLens data.

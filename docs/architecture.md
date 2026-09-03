@@ -67,6 +67,14 @@ stores each as two adjacency entries.
 - Duplicate edges have a documented policy; proposed default is deduplication.
 - Neighbor ordering is deterministic after graph construction.
 
+The Phase 1 `sagerec::BipartiteCSR` implementation uses that proposed default:
+typed `(user_id, movie_id)` interactions are stored as two directed adjacency
+entries, duplicates are dropped, and each neighborhood is sorted by ascending
+global node ID. Self-edges cannot be expressed because construction accepts only
+user-movie pairs with disjoint global ranges. The graph does not ingest
+MovieLens files and does not know about splits; callers must pass training
+positives only.
+
 ### Sampling API
 
 The intended Python-facing abstraction is conceptually:
@@ -79,6 +87,19 @@ seed semantics, invalid-node behavior, and concurrency guarantees. Proposed
 default: uniform sampling without replacement, return the full neighborhood when
 `k >= degree`, and return empty for isolated nodes or `k = 0`.
 
+Phase 1 implements those proposed ADR-005 defaults as the current
+`graph_sampler` contract. ADR-005 remains a proposal. Current behavior:
+
+| Topic | Implementation contract |
+| --- | --- |
+| Replacement | Uniform without replacement |
+| `k == 0` or degree `0` | Empty sequence |
+| `k >= degree` | Full stored neighborhood, CSR order (ascending global IDs) |
+| `0 < k < degree` | `k` unique neighbors; order is Fisher–Yates prefix order |
+| Seed | Explicit; the same `(graph, node_id, k, seed)` tuple is reproducible |
+| Invalid `node_id` or `k < 0` or `seed < 0` | Fail with an actionable `GraphError` |
+| Concurrency | Sampling is `const` and uses a per-call engine; no shared RNG |
+
 ## Training flow
 
 1. Load a versioned dataset manifest and train-only CSR graph.
@@ -89,7 +110,7 @@ default: uniform sampling without replacement, return the full neighborhood when
 6. Compute positive and negative recommendation scores and optimize ranking loss.
 7. Evaluate checkpoints with the fixed ranking protocol.
 
-The precise GNN layers are blocked on the GraphSAGE-versus-GCN decision.
+The GNN family is GraphSAGE (ADR-002). Layer implementation remains Phase 4.
 
 ## Evaluation boundary
 

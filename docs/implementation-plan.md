@@ -1,14 +1,23 @@
 # Phased Implementation Plan
 
-No phase containing code begins until ADR-001 and ADR-002 are accepted.
+ADR-001 (MovieLens 100K) and ADR-002 (GraphSAGE) are accepted. MovieLens 1M
+remains deferred. Code work may proceed within the current phase only.
 
 ## Phase 1: Native foundation
 
+Completed in the first verified slice:
+
 - Define native public contracts and CMake targets.
-- Implement validated CSR construction and selected MovieLens ingestion.
-- Implement seeded sampling with accepted semantics.
-- Add native tests for construction, parsing, edge cases, and reproducibility.
-- Add thin pybind11 bindings and Python binding tests.
+- Implement validated train-only CSR construction from explicit interactions.
+- Implement seeded sampling using the proposed ADR-005 defaults as the
+  implementation contract (ADR-005 is still proposed).
+- Add native tests for construction, edge cases, and seed reproducibility.
+- Add thin pybind11 bindings, Python binding tests, and Release CI.
+
+Remaining Phase 1 work (not started):
+
+- Native MovieLens 100K ratings ingestion and malformed-row errors.
+- Do not add MovieLens 1M parsers, paths, or downloads.
 
 Exit condition: clean Release build, CTest pass, extension import and smoke test pass.
 
