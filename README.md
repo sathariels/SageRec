@@ -59,10 +59,13 @@ Dependencies on Debian/Ubuntu: `cmake`, a C++17 compiler, `python3-dev`,
 `pybind11-dev`, and `python3-pybind11`.
 
 ```bash
-cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
 cmake --build build --config Release
 ctest --test-dir build --output-on-failure --build-config Release
 ```
+
+Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at
+Clang without a discoverable `libstdc++` will fail at configure time.
 
 CTest runs the native CSR/sampler cases and the Python binding smoke tests.
 To run the binding tests directly after a successful build:
