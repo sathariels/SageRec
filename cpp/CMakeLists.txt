@@ -20,6 +20,7 @@ endfunction()
 
 add_library(sagerec_csr STATIC
   src/bipartite_csr.cpp
+  src/movielens_100k.cpp
 )
 target_include_directories(sagerec_csr PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -34,6 +35,12 @@ add_executable(test_bipartite_csr
 target_link_libraries(test_bipartite_csr PRIVATE sagerec_csr)
 sagerec_set_warnings(test_bipartite_csr)
 
+add_executable(test_movielens_100k
+  tests/test_movielens_100k.cpp
+)
+target_link_libraries(test_movielens_100k PRIVATE sagerec_csr)
+sagerec_set_warnings(test_movielens_100k)
+
 set(_native_cases
   construction
   duplicate_edges
@@ -46,6 +53,20 @@ set(_native_cases
 )
 foreach(_case IN LISTS _native_cases)
   add_test(NAME ${_case} COMMAND test_bipartite_csr ${_case})
+endforeach()
+
+set(_ingestion_cases
+  parse_valid
+  crlf_blank_lines
+  normalized_csr
+  empty_input
+  malformed_rows
+  bad_types
+  nonpositive_ids
+  duplicates
+)
+foreach(_case IN LISTS _ingestion_cases)
+  add_test(NAME ${_case} COMMAND test_movielens_100k ${_case})
 endforeach()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)

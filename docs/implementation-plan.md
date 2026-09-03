@@ -14,9 +14,19 @@ Completed in the first verified slice:
 - Add native tests for construction, edge cases, and seed reproducibility.
 - Add thin pybind11 bindings, Python binding tests, and Release CI.
 
-Remaining Phase 1 work (not started):
+Completed in the ingestion slice:
 
-- Native MovieLens 100K ratings ingestion and malformed-row errors.
+- Native MovieLens 100K `u.data` parser (`parse_movielens_100k`) with
+  deterministic zero-based mappings and preserved rating/timestamp.
+- Actionable `GraphError` for empty input, malformed rows/fields/types,
+  nonpositive source IDs, and duplicate source user-movie pairs.
+- Parser stays separate from CSR; callers feed `local_pairs()` into
+  `BipartiteCSR` after they have selected training positives.
+- Native parser tests use tiny in-memory strings only.
+
+Still not started in Phase 1:
+
+- MovieLens download or file-path ingestion helpers.
 - Do not add MovieLens 1M parsers, paths, or downloads.
 
 Exit condition: clean Release build, CTest pass, extension import and smoke test pass.

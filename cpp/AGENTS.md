@@ -2,10 +2,9 @@
 
 ## Responsibility
 
-Own native CSR construction and validation, neighbor sampling, pybind11
-bindings, native tests, and native-side benchmark support. MovieLens 100K
-ingestion is remaining Phase 1 work and is not in the tree yet. Do not add
-MovieLens 1M code.
+Own native CSR construction and validation, neighbor sampling, MovieLens 100K
+`u.data` parsing, pybind11 bindings, native tests, and native-side benchmark
+support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 
 ## Required design properties
 
@@ -27,6 +26,12 @@ MovieLens 1M code.
 - Duplicate interactions are deduplicated (proposed default).
 - `sample_neighbors(node_id, k, seed)` uses proposed ADR-005 defaults.
 - Invalid IDs and `k < 0` throw `sagerec::GraphError` with the expected range.
+- `sagerec::parse_movielens_100k` in `include/sagerec/movielens_100k.hpp` parses
+  in-memory tab-separated `u.data` text. It is not part of `BipartiteCSR`.
+- Parser mappings: local ID is the rank of each source ID among sorted unique
+  IDs of that type. Rating and timestamp are preserved. No split is applied.
+- Parser `GraphError` cases: empty input, wrong field count, non-integer fields,
+  nonpositive source IDs, and duplicate source user-movie pairs.
 
 ## Required tests
 
@@ -37,7 +42,8 @@ MovieLens 1M code.
 - Exact CSR offsets and neighbor storage on a known graph.
 - `k = 0`, `k < degree`, `k = degree`, and `k > degree`.
 - Sample uniqueness, bounds, seed reproducibility, and statistical sanity.
-- MovieLens parsing and malformed-row errors, once ingestion exists.
+- MovieLens 100K parsing from tiny in-memory strings, mapping order, preserved
+  rating/timestamp, CSR handoff via `local_pairs()`, and malformed-row errors.
 - Python construction, lifetime, exception, and sampling smoke tests.
 
 Do not add GNN training, downloads, or a second sampler module name.
