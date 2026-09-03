@@ -1,6 +1,6 @@
 # Native Public API Agent Guide
 
-This directory will contain stable public C++ headers only.
+This directory contains stable public C++ headers only.
 
 - Use fixed-width integer types for stored node IDs and offsets.
 - Document node-ID layout, ownership, lifetime, complexity, and exception behavior.

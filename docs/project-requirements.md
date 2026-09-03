@@ -10,7 +10,8 @@ both recommendation quality and measured native sampling performance.
 
 ### Data
 
-- Support the owner-selected MovieLens 100K or 1M dataset.
+- Support MovieLens 100K (ADR-001). MovieLens 1M is deferred; do not add 1M
+  paths, configs, or downloads.
 - Parse users, movies, ratings, and timestamps.
 - Normalize source IDs into documented zero-based internal IDs.
 - Construct a bipartite graph where every training rating creates a user-movie edge.
@@ -31,7 +32,8 @@ both recommendation quality and measured native sampling performance.
 ### Python training
 
 - Use PyTorch and PyTorch Geometric.
-- Implement the owner-selected GraphSAGE or GCN model.
+- Implement GraphSAGE (ADR-002). Do not add a GCN model unless a superseding
+  decision accepts it.
 - Use the C++ sampler in the mini-batch training data path.
 - Train with non-interacted user-movie negatives and exclude known positives.
 - Make model, optimizer, sampler fanout, batch size, seed, and paths configurable.

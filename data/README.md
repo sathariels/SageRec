@@ -4,5 +4,6 @@
 reserved for normalized interactions, ID mappings, split assignments, manifests,
 and other reproducible products. Both are ignored except for their guidance files.
 
-MovieLens 100K commonly provides tab-separated `u.data`; MovieLens 1M commonly
-provides `::`-separated `ratings.dat`. The final expected input is determined by ADR-001.
+ADR-001 accepts MovieLens 100K (commonly tab-separated `u.data`). MovieLens 1M
+is deferred; do not add 1M paths, configs, or downloads. Ingestion itself is
+not implemented in the first native slice.

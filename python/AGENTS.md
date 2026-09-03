@@ -2,13 +2,21 @@
 
 ## Responsibility
 
-Own dataset preparation orchestration, native sampler integration, GNN and
-baseline models, training, evaluation, configuration, benchmark coordination,
-result serialization, and Python tests.
+Own native-extension stubs and binding tests now. Later: dataset preparation
+orchestration, GNN and baseline models, training, evaluation, configuration,
+benchmark coordination, and result serialization.
+
+## Current slice
+
+- Public type hints live in `graph_sampler.pyi`.
+- Binding tests import the compiled `graph_sampler` module only.
+- Do not implement MovieLens download, split, GraphSAGE training, baseline,
+  or benchmark code until those phases are opened.
+- Do not add MovieLens 1M or GCN modules.
 
 ## Boundaries
 
-- The selected GNN uses PyTorch and PyTorch Geometric.
+- The selected GNN is GraphSAGE and will use PyTorch and PyTorch Geometric.
 - Training neighborhood expansion must call `graph_sampler`; do not quietly fall
   back to a PyG sampler in primary experiments.
 - A naive Python sampler exists only for reference, correctness comparison, and timing.
@@ -27,11 +35,5 @@ result serialization, and Python tests.
 
 ## Tests
 
-- Split leakage and reproducibility.
-- Negative-sample validity.
-- Sampler adapter and native-extension error handling.
-- Metric formulas on hand-computed examples.
-- Common candidate filtering for GNN and baseline.
-- Tiny deterministic end-to-end training/evaluation smoke run.
-
-Do not write Python implementation until the dataset and GNN ADRs are accepted.
+- Binding construction, exceptions, lifetime, and seeded smoke sampling.
+- Later: split leakage, negative-sample validity, metrics, and tiny e2e smoke.

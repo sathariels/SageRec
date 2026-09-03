@@ -9,9 +9,14 @@ and an agent-friendly repository.
 
 ## Current phase
 
-Architecture and context only. Do not write implementation code until the owner
-has confirmed both the dataset size and GNN family. Existing documentation may
-be refined without that confirmation.
+Phase 1 native foundation is open. ADR-001 (MovieLens 100K) and ADR-002
+(GraphSAGE) are accepted; MovieLens 1M is deferred. The first verified slice is
+the C++ CSR graph, seeded neighbor sampler, `graph_sampler` bindings, tests, and
+CI.
+
+Do not implement MovieLens download or ingestion, GNN training, the baseline,
+benchmark charts, or Phase 2–5 unless a later task explicitly asks. Do not add
+MovieLens 1M or GCN paths.
 
 ## Read order
 
@@ -26,16 +31,19 @@ Before changing the repository, read:
 The closest `AGENTS.md` adds local constraints but does not override project-wide
 correctness, reproducibility, or owner-decision requirements.
 
-## Owner decisions required before implementation
+## Owner decisions
 
-- Dataset: MovieLens 100K or MovieLens 1M.
-- GNN: GraphSAGE or GCN.
+Accepted and recorded in `docs/decisions.md`:
 
-Do not infer either choice. Record the owner's answer in `docs/decisions.md`
-before creating dependent code or configuration.
+- ADR-001: MovieLens 100K (MovieLens 1M deferred).
+- ADR-002: GraphSAGE (not GCN).
 
-The split policy and baseline may be proposed with tradeoffs, but must also be
-recorded before experiments begin.
+ADR-003 (split), ADR-004 (baseline), and ADR-005 (sampler replacement) remain
+proposals. The native sampler uses the proposed ADR-005 defaults as its
+implementation contract; do not treat that as an accepted experiment decision.
+
+Record any new owner choice in `docs/decisions.md` before creating dependent
+code or configuration. Do not infer MovieLens 1M or GCN.
 
 ## System-wide invariants
 

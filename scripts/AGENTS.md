@@ -10,4 +10,5 @@ Scripts are future thin, reproducible entry points rather than homes for busines
 - Avoid implicit downloads, destructive cleanup, and environment mutation.
 - Document each supported script in the root README.
 
-No executable scripts should be added before the owner decisions are recorded.
+Owner decisions ADR-001 and ADR-002 are recorded. Still do not add download,
+training, or benchmark scripts until those phases are explicitly opened.

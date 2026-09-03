@@ -1,11 +1,10 @@
 # SageRec
 
-SageRec is a planned graph-neural-network recommendation engine with a
-performance-oriented C++ graph preprocessing and neighbor-sampling backend and
-a Python/PyTorch Geometric training stack.
-
-This repository currently contains architecture and agent guidance only. No
-implementation code has been added.
+SageRec is a graph-neural-network recommendation engine with a C++ graph
+preprocessing and neighbor-sampling backend and a Python/PyTorch Geometric
+training stack. The first verified slice is the native CSR graph, seeded
+sampler, and `graph_sampler` bindings. GNN training, MovieLens download, the
+baseline, and benchmark charts are not implemented yet.
 
 ## Intended system
 
@@ -16,7 +15,7 @@ flowchart LR
     C --> D[C++ neighbor sampler]
     D --> E[pybind11 graph_sampler module]
     E --> F[Python mini-batch loader]
-    F --> G[GNN recommender]
+    F --> G[GraphSAGE recommender]
     B --> H[Baseline recommender]
     G --> I[Recall@10 and NDCG@10]
     H --> I
@@ -32,34 +31,59 @@ backend rather than a demonstration wrapper.
 | Directory | Responsibility |
 | --- | --- |
 | `cpp/` | Native CSR construction, sampling, pybind11 boundary, and tests |
-| `python/` | Data orchestration, GNN, baseline, training, evaluation, benchmark |
+| `python/` | Binding stubs/tests now; later data orchestration, GNN, baseline |
 | `data/` | Local raw inputs and reproducible processed artifacts |
 | `results/` | Metrics, benchmark summaries, and charts |
 | `docs/` | Architecture, decisions, protocols, and plans |
 | `scripts/` | Future thin, reproducible workflow entry points |
 
-Read [AGENTS.md](AGENTS.md) before making changes. Each planned subsystem also
-has a local `AGENTS.md` with narrower requirements.
+Read [AGENTS.md](AGENTS.md) before making changes. Each subsystem also has a
+local `AGENTS.md` with narrower requirements.
 
-## Owner decisions still required
+## Owner decisions
 
-Implementation must not start until the owner confirms:
+Recorded in [docs/decisions.md](docs/decisions.md):
 
-1. MovieLens 100K or MovieLens 1M.
-2. GraphSAGE or GCN.
+1. **ADR-001 (accepted, 2026-09-02, Nithilan Kumaran):** MovieLens 100K.
+   MovieLens 1M is deferred; do not add 1M paths, configs, or downloads.
+2. **ADR-002 (accepted, 2026-09-02, Nithilan Kumaran):** GraphSAGE, not GCN.
 
-The baseline and split policy are also documented as proposals, not settled
-choices, in [docs/decisions.md](docs/decisions.md).
+ADR-003 (split), ADR-004 (baseline), and ADR-005 (sampler replacement) remain
+proposals. The native sampler uses the proposed ADR-005 defaults as its
+implementation contract: uniform sampling without replacement, full neighborhood
+when `k >= degree`, empty result for isolated nodes or `k = 0`.
+
+## Build and test the native foundation
+
+Dependencies on Debian/Ubuntu: `cmake`, a C++17 compiler, `python3-dev`,
+`pybind11-dev`, and `python3-pybind11`.
+
+```bash
+cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+ctest --test-dir build --output-on-failure --build-config Release
+```
+
+CTest runs the native CSR/sampler cases and the Python binding smoke tests.
+To run the binding tests directly after a successful build:
+
+```bash
+PYTHONPATH=build python3 -m unittest discover -s python/tests -v
+```
+
+`import graph_sampler` loads the compiled extension. Construction takes local
+`(user_id, movie_id)` pairs on a synthetic graph; do not vendor MovieLens data.
 
 ## Target deliverables
 
 - A clean CMake build for the C++17/pybind11 module.
 - A tested CSR graph and native neighbor sampler.
-- A benchmark against an equivalent naive Python sampler.
-- A PyTorch Geometric GNN trained with negative sampling and the native sampler.
-- A matrix-factorization or node2vec baseline.
-- Leakage-safe evaluation with Recall@10 and NDCG@10.
-- Reproducible result tables and charts.
+- A benchmark against an equivalent naive Python sampler (not yet).
+- A PyTorch Geometric GraphSAGE model trained with negative sampling and the
+  native sampler (not yet).
+- A matrix-factorization or node2vec baseline (ADR-004 still proposed).
+- Leakage-safe evaluation with Recall@10 and NDCG@10 (not yet).
+- Reproducible result tables and charts (not yet).
 
 See [docs/project-requirements.md](docs/project-requirements.md) for acceptance
 criteria and [docs/architecture.md](docs/architecture.md) for component contracts.
