@@ -75,6 +75,27 @@ user-movie pairs with disjoint global ranges. The graph does not ingest
 MovieLens files and does not know about splits; callers must pass training
 positives only.
 
+### MovieLens 100K parser
+
+`sagerec::parse_movielens_100k` accepts in-memory tab-separated `u.data` text
+(source user id, movie id, rating, timestamp). It is a separate unit from CSR
+construction:
+
+- Source IDs must be positive integers. Local user and movie IDs are the ranks
+  of those source IDs among the sorted unique IDs of each type.
+- Rating and timestamp are preserved on each normalized interaction.
+- Interaction order follows the non-blank input rows. Whitespace-only lines are
+  skipped. CRLF endings are accepted.
+- No split field is assigned (ADR-003 remains proposed). The parser never
+  downloads data, reads a filesystem path, or parses MovieLens 1M.
+- `local_pairs()` yields the `(user_id, movie_id)` vector that
+  `BipartiteCSR::from_interactions` already accepts. Callers must still restrict
+  that list to training positives before building a sampling graph.
+
+Invalid input throws `GraphError` with the 1-based row number and the expected
+constraint: empty input, wrong field count, non-integer fields, integer overflow,
+nonpositive source IDs, or a duplicate source user-movie pair.
+
 ### Sampling API
 
 The intended Python-facing abstraction is conceptually:

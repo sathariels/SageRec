@@ -20,7 +20,8 @@ both recommendation quality and measured native sampling performance.
 
 ### C++ backend
 
-- Load normalized interactions or the selected MovieLens ratings format.
+- Load normalized interactions or the selected MovieLens 100K `u.data` format
+  (`sagerec::parse_movielens_100k` for in-memory tab-separated rows).
 - Construct and validate compressed sparse row adjacency.
 - Implement native neighbor sampling without delegating to a graph library.
 - Define behavior for isolated nodes, `k = 0`, `k >= degree`, replacement policy,

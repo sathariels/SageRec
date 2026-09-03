@@ -2,9 +2,9 @@
 
 SageRec is a graph-neural-network recommendation engine with a C++ graph
 preprocessing and neighbor-sampling backend and a Python/PyTorch Geometric
-training stack. The first verified slice is the native CSR graph, seeded
-sampler, and `graph_sampler` bindings. GNN training, MovieLens download, the
-baseline, and benchmark charts are not implemented yet.
+training stack. The verified slice is the native CSR graph, seeded sampler,
+MovieLens 100K `u.data` parser, and `graph_sampler` bindings. GNN training,
+MovieLens download, the baseline, and benchmark charts are not implemented yet.
 
 ## Intended system
 
@@ -30,7 +30,7 @@ backend rather than a demonstration wrapper.
 
 | Directory | Responsibility |
 | --- | --- |
-| `cpp/` | Native CSR construction, sampling, pybind11 boundary, and tests |
+| `cpp/` | Native CSR construction, ML-100K parser, sampling, bindings, tests |
 | `python/` | Binding stubs/tests now; later data orchestration, GNN, baseline |
 | `data/` | Local raw inputs and reproducible processed artifacts |
 | `results/` | Metrics, benchmark summaries, and charts |
@@ -77,10 +77,18 @@ PYTHONPATH=build python3 -m unittest discover -s python/tests -v
 `import graph_sampler` loads the compiled extension. Construction takes local
 `(user_id, movie_id)` pairs on a synthetic graph; do not vendor MovieLens data.
 
+Native MovieLens 100K ingestion is `sagerec::parse_movielens_100k` in
+`cpp/include/sagerec/movielens_100k.hpp`. It parses in-memory tab-separated
+`u.data` text, remaps source IDs to contiguous zero-based local IDs, and
+preserves rating and timestamp. It does not download data, apply a split, or
+build the CSR; pass training-positive `local_pairs()` into `BipartiteCSR`.
+Parser tests use tiny strings only.
+
 ## Target deliverables
 
 - A clean CMake build for the C++17/pybind11 module.
 - A tested CSR graph and native neighbor sampler.
+- A tested MovieLens 100K `u.data` parser with deterministic ID mappings.
 - A benchmark against an equivalent naive Python sampler (not yet).
 - A PyTorch Geometric GraphSAGE model trained with negative sampling and the
   native sampler (not yet).

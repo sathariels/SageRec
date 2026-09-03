@@ -21,7 +21,9 @@ namespace sagerec {
 /// ascending global-ID order.
 ///
 /// The graph does not parse MovieLens files and does not apply splits. Callers
-/// must pass training-positive interactions only.
+/// must pass training-positive interactions only. MovieLens 100K text is parsed
+/// by `parse_movielens_100k`; feed its `local_pairs()` here after restricting
+/// to training positives.
 ///
 /// Ownership: the instance owns offsets and neighbor buffers. Accessors return
 /// references valid for the lifetime of the graph. sample_neighbors returns a
