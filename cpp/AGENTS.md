@@ -28,6 +28,9 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 - Invalid IDs and `k < 0` throw `sagerec::GraphError` with the expected range.
 - `sagerec::parse_movielens_100k` in `include/sagerec/movielens_100k.hpp` parses
   in-memory tab-separated `u.data` text. It is not part of `BipartiteCSR`.
+- `graph_sampler` also exposes `parse_movielens_100k`, `MovieLens100kRatings`,
+  and `MovieLens100kInteraction`. Bindings copy Python text into owned storage
+  before releasing the GIL; they do not add file-path or download helpers.
 - Parser mappings: local ID is the rank of each source ID among sorted unique
   IDs of that type. Rating and timestamp are preserved. No split is applied.
 - Parser `GraphError` cases: empty input, wrong field count, non-integer fields,
@@ -44,6 +47,7 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 - Sample uniqueness, bounds, seed reproducibility, and statistical sanity.
 - MovieLens 100K parsing from tiny in-memory strings, mapping order, preserved
   rating/timestamp, CSR handoff via `local_pairs()`, and malformed-row errors.
-- Python construction, lifetime, exception, and sampling smoke tests.
+- Python construction, lifetime, exception, sampling, and in-memory parser
+  smoke tests (`local_pairs()` CSR handoff and `GraphError` on bad input).
 
 Do not add GNN training, downloads, or a second sampler module name.

@@ -6,8 +6,10 @@ This directory contains C++ implementations and the thin pybind11 boundary.
 - `movielens_100k.cpp` owns MovieLens 100K `u.data` parsing and ID mapping.
   It must not construct a CSR or apply a split.
 - `bindings.cpp` must stay free of business logic beyond GIL release, seed
-  sign checks, and exception translation. Do not bind the parser until a later
-  task asks for a Python ingestion surface.
+  sign checks, and exception translation. Bind the in-memory parser as
+  `parse_movielens_100k` / `MovieLens100kRatings`; copy Python `str`/`bytes`
+  into owned C++ storage before releasing the GIL. Do not add file-path
+  readers or downloads.
 - Validate inputs at public boundaries and keep internal hot paths lean.
 - Prefer contiguous storage, RAII, standard-library facilities, and explicit types.
 - Avoid global mutable state and implicit thread-local random engines.

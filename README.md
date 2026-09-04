@@ -77,8 +77,9 @@ PYTHONPATH=build python3 -m unittest discover -s python/tests -v
 `import graph_sampler` loads the compiled extension. Construction takes local
 `(user_id, movie_id)` pairs on a synthetic graph; do not vendor MovieLens data.
 
-Native MovieLens 100K ingestion is `sagerec::parse_movielens_100k` in
-`cpp/include/sagerec/movielens_100k.hpp`. It parses in-memory tab-separated
+MovieLens 100K ingestion is `sagerec::parse_movielens_100k` in
+`cpp/include/sagerec/movielens_100k.hpp`, also bound as
+`graph_sampler.parse_movielens_100k`. It parses in-memory tab-separated
 `u.data` text, remaps source IDs to contiguous zero-based local IDs, and
 preserves rating and timestamp. It does not download data, apply a split, or
 build the CSR; pass training-positive `local_pairs()` into `BipartiteCSR`.

@@ -10,6 +10,7 @@ benchmark coordination, and result serialization.
 
 - Public type hints live in `graph_sampler.pyi`.
 - Binding tests import the compiled `graph_sampler` module only.
+- The module exposes `BipartiteCSR` and in-memory `parse_movielens_100k`.
 - Do not implement MovieLens download, split, GraphSAGE training, baseline,
   or benchmark code until those phases are opened.
 - Do not add MovieLens 1M or GCN modules.
@@ -35,5 +36,6 @@ benchmark coordination, and result serialization.
 
 ## Tests
 
-- Binding construction, exceptions, lifetime, and seeded smoke sampling.
+- Binding construction, exceptions, lifetime, seeded smoke sampling, and
+  in-memory MovieLens 100K parser tests (tiny strings, CSR handoff, GraphError).
 - Later: split leakage, negative-sample validity, metrics, and tiny e2e smoke.

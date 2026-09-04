@@ -96,6 +96,12 @@ Invalid input throws `GraphError` with the 1-based row number and the expected
 constraint: empty input, wrong field count, non-integer fields, integer overflow,
 nonpositive source IDs, or a duplicate source user-movie pair.
 
+The same in-memory parser is bound on `graph_sampler` as `parse_movielens_100k`,
+returning `MovieLens100kRatings` (`num_users`, `num_movies`, `interactions`,
+`user_source_ids`, `movie_source_ids`, `local_pairs()`). Callers still pass
+training positives only into `BipartiteCSR`. The binding copies Python text into
+owned C++ storage before releasing the GIL.
+
 ### Sampling API
 
 The intended Python-facing abstraction is conceptually:

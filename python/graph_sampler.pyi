@@ -3,12 +3,38 @@
 The compiled module is produced by the CMake target `graph_sampler`.
 Users occupy [0, num_users); movies occupy [num_users, num_nodes).
 Construction takes local (user_id, movie_id) pairs, not global movie IDs.
+parse_movielens_100k accepts in-memory tab-separated u.data text only.
 """
 
 from collections.abc import Sequence
 
 class GraphError(ValueError):
-    """Invalid graph construction or sample request."""
+    """Invalid graph construction, parse request, or sample request."""
+
+class MovieLens100kInteraction:
+    @property
+    def user_id(self) -> int: ...
+    @property
+    def movie_id(self) -> int: ...
+    @property
+    def rating(self) -> int: ...
+    @property
+    def timestamp(self) -> int: ...
+
+class MovieLens100kRatings:
+    @property
+    def num_users(self) -> int: ...
+    @property
+    def num_movies(self) -> int: ...
+    @property
+    def interactions(self) -> list[MovieLens100kInteraction]: ...
+    @property
+    def user_source_ids(self) -> list[int]: ...
+    @property
+    def movie_source_ids(self) -> list[int]: ...
+    def local_pairs(self) -> list[tuple[int, int]]: ...
+
+def parse_movielens_100k(text: str) -> MovieLens100kRatings: ...
 
 class BipartiteCSR:
     def __init__(

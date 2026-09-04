@@ -24,6 +24,13 @@ Completed in the ingestion slice:
   `BipartiteCSR` after they have selected training positives.
 - Native parser tests use tiny in-memory strings only.
 
+Completed in the parser-binding slice:
+
+- `graph_sampler.parse_movielens_100k` and `MovieLens100kRatings` pybind11
+  surface with matching `.pyi` stubs.
+- Python binding smoke tests use tiny in-memory `u.data` strings only:
+  mappings, `local_pairs()` CSR handoff, and malformed-input `GraphError`.
+
 Still not started in Phase 1:
 
 - MovieLens download or file-path ingestion helpers.
