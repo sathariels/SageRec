@@ -40,10 +40,18 @@ Exit condition: clean Release build, CTest pass, extension import and smoke test
 
 ## Phase 2: Data and benchmark harness
 
-- Implement deterministic preparation, ID mappings, split, and manifest.
-- Implement the equivalent naive Python sampler.
-- Create correctness-parity and performance workloads.
-- Store machine-readable benchmark results and generated chart.
+Opened in the reference-sampler slice (Phase 2 is not complete; ADR-003
+remains a proposal):
+
+- Naive Python sampler in `python/sagerec_reference_sampler.py` matching the
+  native `sample_neighbors` contract (Fisher–Yates prefix, `std::mt19937_64`,
+  unbiased `uniform_below`).
+- Unittest parity cases against compiled `graph_sampler` on synthetic graphs.
+
+Still not started:
+
+- Deterministic preparation, ID mappings, split, and manifest.
+- Performance workloads, stored timing results, and generated charts.
 
 Exit condition: selected dataset prepares reproducibly and benchmark evidence is complete.
 

@@ -9,10 +9,15 @@ benchmark coordination, and result serialization.
 ## Current slice
 
 - Public type hints live in `graph_sampler.pyi`.
-- Binding tests import the compiled `graph_sampler` module only.
+- Binding tests import the compiled `graph_sampler` module.
 - The module exposes `BipartiteCSR` and in-memory `parse_movielens_100k`.
+- `sagerec_reference_sampler.py` is a naive Python neighbor sampler for
+  correctness comparison. It consumes CSR `offsets`/`neighbors` views and
+  matches the native `sample_neighbors` contract (Fisher–Yates prefix,
+  `std::mt19937_64`, unbiased `uniform_below`). It does not build graphs,
+  apply splits, or ingest MovieLens files.
 - Do not implement MovieLens download, split, GraphSAGE training, baseline,
-  or benchmark code until those phases are opened.
+  timing charts, or remaining Phase 2–5 work until those phases are opened.
 - Do not add MovieLens 1M or GCN modules.
 
 ## Boundaries
@@ -38,4 +43,6 @@ benchmark coordination, and result serialization.
 
 - Binding construction, exceptions, lifetime, seeded smoke sampling, and
   in-memory MovieLens 100K parser tests (tiny strings, CSR handoff, GraphError).
+- Reference-vs-native `sample_neighbors` parity on synthetic graphs
+  (`k = 0`, full neighborhood, subset reproducibility, invalid inputs).
 - Later: split leakage, negative-sample validity, metrics, and tiny e2e smoke.

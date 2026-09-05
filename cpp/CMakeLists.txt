@@ -100,11 +100,12 @@ configure_file(
   COPYONLY
 )
 
-set(_python_tests_dir ${CMAKE_CURRENT_SOURCE_DIR}/../python/tests)
+set(_python_src_dir ${CMAKE_CURRENT_SOURCE_DIR}/../python)
+set(_python_tests_dir ${_python_src_dir}/tests)
 add_test(
   NAME python_binding_smoke
   COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${_python_tests_dir} -v
 )
 set_tests_properties(python_binding_smoke PROPERTIES
-  ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:graph_sampler>"
+  ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:graph_sampler>:${_python_src_dir}"
 )

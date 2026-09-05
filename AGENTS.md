@@ -9,14 +9,17 @@ and an agent-friendly repository.
 
 ## Current phase
 
-Phase 1 native foundation is open. ADR-001 (MovieLens 100K) and ADR-002
+Phase 1 native foundation is verified. ADR-001 (MovieLens 100K) and ADR-002
 (GraphSAGE) are accepted; MovieLens 1M is deferred. The verified slice is the
 C++ CSR graph, seeded neighbor sampler, MovieLens 100K `u.data` parser,
-`graph_sampler` bindings (including `parse_movielens_100k`), tests, and CI.
+`graph_sampler` bindings (including `parse_movielens_100k`), a naive Python
+reference sampler with native parity tests, and CI.
 
-Do not implement MovieLens download, GNN training, the baseline, benchmark
-charts, or Phase 2–5 unless a later task explicitly asks. Do not add MovieLens
-1M or GCN paths.
+A weekend Phase-2 harness slice is open for the reference sampler and
+parity tests only. Do not implement MovieLens download, dataset prep/split,
+GNN training, the baseline, benchmark charts, or remaining Phase 2–5 work
+unless a later task explicitly asks. Do not add MovieLens 1M or GCN paths.
+Do not accept ADR-003, ADR-004, or ADR-005.
 
 ## Read order
 

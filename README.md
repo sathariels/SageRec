@@ -31,7 +31,7 @@ backend rather than a demonstration wrapper.
 | Directory | Responsibility |
 | --- | --- |
 | `cpp/` | Native CSR construction, ML-100K parser, sampling, bindings, tests |
-| `python/` | Binding stubs/tests now; later data orchestration, GNN, baseline |
+| `python/` | Binding stubs, reference sampler, tests; later data/GNN/baseline |
 | `data/` | Local raw inputs and reproducible processed artifacts |
 | `results/` | Metrics, benchmark summaries, and charts |
 | `docs/` | Architecture, decisions, protocols, and plans |
@@ -67,12 +67,19 @@ ctest --test-dir build --output-on-failure --build-config Release
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at
 Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs the native CSR/sampler cases and the Python binding smoke tests.
-To run the binding tests directly after a successful build:
+CTest runs the native CSR/sampler cases and the Python unittest discover
+suite (binding smoke tests plus native-vs-reference sampler parity).
+To run those Python tests directly after a successful build:
 
 ```bash
 PYTHONPATH=build python3 -m unittest discover -s python/tests -v
 ```
+
+`python/sagerec_reference_sampler.py` is a naive Python neighbor sampler
+that matches the native `sample_neighbors` contract for correctness
+comparison. It reads CSR `offsets`/`neighbors` from `BipartiteCSR` and
+does not construct graphs or ingest MovieLens files. Timing charts and
+benchmark reports are not implemented.
 
 `import graph_sampler` loads the compiled extension. Construction takes local
 `(user_id, movie_id)` pairs on a synthetic graph; do not vendor MovieLens data.
@@ -90,7 +97,8 @@ Parser tests use tiny strings only.
 - A clean CMake build for the C++17/pybind11 module.
 - A tested CSR graph and native neighbor sampler.
 - A tested MovieLens 100K `u.data` parser with deterministic ID mappings.
-- A benchmark against an equivalent naive Python sampler (not yet).
+- A naive Python reference sampler with native parity tests (timing
+  charts and stored benchmark numbers not yet).
 - A PyTorch Geometric GraphSAGE model trained with negative sampling and the
   native sampler (not yet).
 - A matrix-factorization or node2vec baseline (ADR-004 still proposed).

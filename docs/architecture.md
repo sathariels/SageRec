@@ -115,7 +115,11 @@ default: uniform sampling without replacement, return the full neighborhood when
 `k >= degree`, and return empty for isolated nodes or `k = 0`.
 
 Phase 1 implements those proposed ADR-005 defaults as the current
-`graph_sampler` contract. ADR-005 remains a proposal. Current behavior:
+`graph_sampler` contract. ADR-005 remains a proposal. The naive Python
+reference in `python/sagerec_reference_sampler.py` consumes CSR
+`offsets`/`neighbors` views and implements the same contract, including the
+native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
+`uniform_below` draw. Current behavior:
 
 | Topic | Implementation contract |
 | --- | --- |
@@ -148,8 +152,10 @@ logic. This keeps GNN/baseline comparisons identical.
 ## Benchmark boundary
 
 The native and reference samplers consume the same query workload and satisfy the
-same output properties. Workload generation occurs outside timed regions. Release
-native builds are mandatory for published timing.
+same output properties. The reference sampler and synthetic-graph parity tests
+exist; timed workloads, stored benchmark numbers, and charts do not. Workload
+generation occurs outside timed regions. Release native builds are mandatory for
+published timing.
 
 ## Dependency direction
 
