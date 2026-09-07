@@ -20,6 +20,7 @@ data/raw/*
 !data/raw/AGENTS.md
 data/processed/*
 !data/processed/AGENTS.md
+!data/processed/manifest.schema.json
 results/checkpoints/
 results/runs/
 

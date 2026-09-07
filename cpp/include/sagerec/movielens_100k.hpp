@@ -13,7 +13,8 @@ namespace sagerec {
 ///
 /// `user_id` and `movie_id` are contiguous local IDs suitable for
 /// `BipartiteCSR::from_interactions`. Rating and timestamp are the original
-/// u.data values. This type does not assign a split (ADR-003 is still proposed).
+/// u.data values. This type does not assign a split; ADR-003 leave-one-out
+/// runs in Python on these normalized rows.
 struct MovieLens100kInteraction {
   NodeId user_id = 0;
   NodeId movie_id = 0;

@@ -2,7 +2,8 @@
 
 ## Responsibility
 
-Own native-extension stubs and binding tests now. Later: dataset preparation
+Own native-extension stubs, binding tests, the reference sampler, and
+in-memory MovieLens 100K split/prep (ADR-003). Later: download/on-disk
 orchestration, GNN and baseline models, training, evaluation, configuration,
 benchmark coordination, and result serialization.
 
@@ -16,8 +17,12 @@ benchmark coordination, and result serialization.
   matches the native `sample_neighbors` contract (Fisher–Yates prefix,
   `std::mt19937_64`, unbiased `uniform_below`). It does not build graphs,
   apply splits, or ingest MovieLens files.
-- Do not implement MovieLens download, split, GraphSAGE training, baseline,
-  timing charts, or remaining Phase 2–5 work until those phases are opened.
+- `sagerec_prep.py` assigns ADR-003 leave-one-out splits in memory and
+  emits train-only pairs plus a manifest dict. It does not download data,
+  read dataset paths, or construct a CSR.
+- Do not implement MovieLens download, on-disk prep, GraphSAGE training,
+  baseline, timing charts, or remaining Phase 2–5 work until those phases
+  are opened.
 - Do not add MovieLens 1M or GCN modules.
 
 ## Boundaries
@@ -45,4 +50,7 @@ benchmark coordination, and result serialization.
   in-memory MovieLens 100K parser tests (tiny strings, CSR handoff, GraphError).
 - Reference-vs-native `sample_neighbors` parity on synthetic graphs
   (`k = 0`, full neighborhood, subset reproducibility, invalid inputs).
-- Later: split leakage, negative-sample validity, metrics, and tiny e2e smoke.
+- ADR-003 leave-one-out leakage tests on tiny synthetic interactions:
+  held-out positives absent from the train-pair/CSR edge set, eligibility,
+  timestamp order and tie-break, cold-start assignment, and determinism.
+- Later: negative-sample validity, metrics, and tiny e2e smoke.

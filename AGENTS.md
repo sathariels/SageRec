@@ -9,17 +9,18 @@ and an agent-friendly repository.
 
 ## Current phase
 
-Phase 1 native foundation is verified. ADR-001 (MovieLens 100K) and ADR-002
-(GraphSAGE) are accepted; MovieLens 1M is deferred. The verified slice is the
-C++ CSR graph, seeded neighbor sampler, MovieLens 100K `u.data` parser,
-`graph_sampler` bindings (including `parse_movielens_100k`), a naive Python
-reference sampler with native parity tests, and CI.
+Phase 1 native foundation is verified. ADR-001 (MovieLens 100K), ADR-002
+(GraphSAGE), and ADR-003 (per-user chronological leave-one-out) are accepted;
+MovieLens 1M is deferred. The verified slice is the C++ CSR graph, seeded
+neighbor sampler, MovieLens 100K `u.data` parser, `graph_sampler` bindings
+(including `parse_movielens_100k`), a naive Python reference sampler with
+native parity tests, and CI.
 
-A weekend Phase-2 harness slice is open for the reference sampler and
-parity tests only. Do not implement MovieLens download, dataset prep/split,
-GNN training, the baseline, benchmark charts, or remaining Phase 2–5 work
-unless a later task explicitly asks. Do not add MovieLens 1M or GCN paths.
-Do not accept ADR-003, ADR-004, or ADR-005.
+Phase 2 is open for the reference sampler, parity tests, and the in-memory
+MovieLens 100K leave-one-out split/prep slice only. Do not implement MovieLens
+download, on-disk dataset prep, GNN training, the baseline, benchmark charts,
+or remaining Phase 2–5 work unless a later task explicitly asks. Do not add
+MovieLens 1M or GCN paths. Do not accept ADR-004 or ADR-005.
 
 ## Read order
 
@@ -40,10 +41,12 @@ Accepted and recorded in `docs/decisions.md`:
 
 - ADR-001: MovieLens 100K (MovieLens 1M deferred).
 - ADR-002: GraphSAGE (not GCN).
+- ADR-003: Per-user chronological leave-one-out (min 3 interactions; cold-start
+  users keep all rows in train and are excluded from ranking eligibility).
 
-ADR-003 (split), ADR-004 (baseline), and ADR-005 (sampler replacement) remain
-proposals. The native sampler uses the proposed ADR-005 defaults as its
-implementation contract; do not treat that as an accepted experiment decision.
+ADR-004 (baseline) and ADR-005 (sampler replacement) remain proposals. The
+native sampler uses the proposed ADR-005 defaults as its implementation
+contract; do not treat that as an accepted experiment decision.
 
 Record any new owner choice in `docs/decisions.md` before creating dependent
 code or configuration. Do not infer MovieLens 1M or GCN.

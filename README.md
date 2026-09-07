@@ -3,8 +3,9 @@
 SageRec is a graph-neural-network recommendation engine with a C++ graph
 preprocessing and neighbor-sampling backend and a Python/PyTorch Geometric
 training stack. The verified slice is the native CSR graph, seeded sampler,
-MovieLens 100K `u.data` parser, and `graph_sampler` bindings. GNN training,
-MovieLens download, the baseline, and benchmark charts are not implemented yet.
+MovieLens 100K `u.data` parser, `graph_sampler` bindings, a Python reference
+sampler, and in-memory ADR-003 leave-one-out prep. GNN training, MovieLens
+download, the baseline, and benchmark charts are not implemented yet.
 
 ## Intended system
 
@@ -31,7 +32,7 @@ backend rather than a demonstration wrapper.
 | Directory | Responsibility |
 | --- | --- |
 | `cpp/` | Native CSR construction, ML-100K parser, sampling, bindings, tests |
-| `python/` | Binding stubs, reference sampler, tests; later data/GNN/baseline |
+| `python/` | Binding stubs, reference sampler, in-memory split/prep, tests |
 | `data/` | Local raw inputs and reproducible processed artifacts |
 | `results/` | Metrics, benchmark summaries, and charts |
 | `docs/` | Architecture, decisions, protocols, and plans |
@@ -47,11 +48,17 @@ Recorded in [docs/decisions.md](docs/decisions.md):
 1. **ADR-001 (accepted, 2026-09-02, Nithilan Kumaran):** MovieLens 100K.
    MovieLens 1M is deferred; do not add 1M paths, configs, or downloads.
 2. **ADR-002 (accepted, 2026-09-02, Nithilan Kumaran):** GraphSAGE, not GCN.
+3. **ADR-003 (accepted, 2026-09-07, Nithilan Kumaran):** Per-user chronological
+   leave-one-out. Eligible users need at least three interactions (latest →
+   test, second-latest → validation, earlier → train). Users with fewer than
+   three interactions are cold-start: all rows stay in train and the user is
+   excluded from ranking eligibility. Timestamp ties break on
+   `(user_id, movie_id)` (local IDs; equivalent to source-ID order).
 
-ADR-003 (split), ADR-004 (baseline), and ADR-005 (sampler replacement) remain
-proposals. The native sampler uses the proposed ADR-005 defaults as its
-implementation contract: uniform sampling without replacement, full neighborhood
-when `k >= degree`, empty result for isolated nodes or `k = 0`.
+ADR-004 (baseline) and ADR-005 (sampler replacement) remain proposals. The
+native sampler uses the proposed ADR-005 defaults as its implementation
+contract: uniform sampling without replacement, full neighborhood when
+`k >= degree`, empty result for isolated nodes or `k = 0`.
 
 ## Build and test the native foundation
 
@@ -68,11 +75,12 @@ Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at
 Clang without a discoverable `libstdc++` will fail at configure time.
 
 CTest runs the native CSR/sampler cases and the Python unittest discover
-suite (binding smoke tests plus native-vs-reference sampler parity).
-To run those Python tests directly after a successful build:
+suite (binding smoke tests, native-vs-reference sampler parity, and
+leave-one-out prep/leakage tests). To run those Python tests directly after
+a successful build:
 
 ```bash
-PYTHONPATH=build python3 -m unittest discover -s python/tests -v
+PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
 ```
 
 `python/sagerec_reference_sampler.py` is a naive Python neighbor sampler
@@ -80,6 +88,11 @@ that matches the native `sample_neighbors` contract for correctness
 comparison. It reads CSR `offsets`/`neighbors` from `BipartiteCSR` and
 does not construct graphs or ingest MovieLens files. Timing charts and
 benchmark reports are not implemented.
+
+`python/sagerec_prep.py` assigns ADR-003 splits in memory and returns
+train-only `(user_id, movie_id)` pairs for `BipartiteCSR`. It does not
+download MovieLens data or write `data/processed/`. The manifest schema is
+`data/processed/manifest.schema.json`.
 
 `import graph_sampler` loads the compiled extension. Construction takes local
 `(user_id, movie_id)` pairs on a synthetic graph; do not vendor MovieLens data.
@@ -99,6 +112,7 @@ Parser tests use tiny strings only.
 - A tested MovieLens 100K `u.data` parser with deterministic ID mappings.
 - A naive Python reference sampler with native parity tests (timing
   charts and stored benchmark numbers not yet).
+- Deterministic in-memory MovieLens 100K leave-one-out prep with leakage tests.
 - A PyTorch Geometric GraphSAGE model trained with negative sampling and the
   native sampler (not yet).
 - A matrix-factorization or node2vec baseline (ADR-004 still proposed).

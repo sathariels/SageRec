@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sagerec.local/schemas/movielens-100k-split-manifest.json",
+  "title": "SageRec MovieLens 100K split manifest",
+  "description": "Provenance for an in-memory ADR-003 leave-one-out split. Placeholders for source_url and checksum are allowed; this schema does not require a download.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_edition",
+    "split_policy_id",
+    "split_policy_name",
+    "split_policy_version",
+    "min_interactions_for_eval",
+    "cold_start_policy",
+    "tie_break",
+    "seed",
+    "counts",
+    "source_url",
+    "checksum",
+    "license"
+  ],
+  "properties": {
+    "dataset_edition": {
+      "const": "100k",
+      "description": "ADR-001 edition. MovieLens 1M is deferred."
+    },
+    "split_policy_id": {
+      "const": "per_user_chronological_leave_one_out"
+    },
+    "split_policy_name": {
+      "type": "string"
+    },
+    "split_policy_version": {
+      "type": "string",
+      "description": "Policy version string. The split is chronological and does not use an RNG."
+    },
+    "min_interactions_for_eval": {
+      "const": 3
+    },
+    "cold_start_policy": {
+      "const": "all_to_train_exclude_from_eval"
+    },
+    "tie_break": {
+      "const": "timestamp_asc_user_id_asc_movie_id_asc",
+      "description": "Sort key (timestamp, local user_id, local movie_id). Local IDs preserve source-ID order from parse_movielens_100k."
+    },
+    "seed": {
+      "type": "null",
+      "description": "Unused. Leave-one-out ranking is not randomized."
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "users",
+        "movies",
+        "interactions",
+        "eligible_users",
+        "cold_start_users"
+      ],
+      "properties": {
+        "users": { "type": "integer", "minimum": 1 },
+        "movies": { "type": "integer", "minimum": 1 },
+        "eligible_users": { "type": "integer", "minimum": 0 },
+        "cold_start_users": { "type": "integer", "minimum": 0 },
+        "interactions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "train", "validation", "test"],
+          "properties": {
+            "total": { "type": "integer", "minimum": 1 },
+            "train": { "type": "integer", "minimum": 0 },
+            "validation": { "type": "integer", "minimum": 0 },
+            "test": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "source_url": {
+      "type": ["string", "null"],
+      "description": "Optional GroupLens / archive URL. Not fetched by prep helpers."
+    },
+    "checksum": {
+      "type": ["string", "null"],
+      "description": "Optional ratings-file checksum placeholder."
+    },
+    "license": {
+      "type": ["string", "null"]
+    }
+  }
+}

@@ -86,8 +86,9 @@ construction:
 - Rating and timestamp are preserved on each normalized interaction.
 - Interaction order follows the non-blank input rows. Whitespace-only lines are
   skipped. CRLF endings are accepted.
-- No split field is assigned (ADR-003 remains proposed). The parser never
-  downloads data, reads a filesystem path, or parses MovieLens 1M.
+- No split field is assigned here. ADR-003 leave-one-out runs in Python
+  (`sagerec_prep.split_interactions`) on these normalized rows. The parser
+  never downloads data, reads a filesystem path, or parses MovieLens 1M.
 - `local_pairs()` yields the `(user_id, movie_id)` vector that
   `BipartiteCSR::from_interactions` already accepts. Callers must still restrict
   that list to training positives before building a sampling graph.
@@ -95,6 +96,26 @@ construction:
 Invalid input throws `GraphError` with the 1-based row number and the expected
 constraint: empty input, wrong field count, non-integer fields, integer overflow,
 nonpositive source IDs, or a duplicate source user-movie pair.
+
+### Leave-one-out split (ADR-003)
+
+`python/sagerec_prep.py` assigns splits in memory to already-normalized
+interactions (parser structs or equivalent). It does not remap IDs, read
+paths, or download data:
+
+- Eligible users have at least three interactions. After sorting each user's
+  rows by `(timestamp, user_id, movie_id)` ascending, the last row is test,
+  the second-last is validation, and earlier rows are train.
+- Users with fewer than three interactions are cold-start: every row is train,
+  and the user is omitted from validation/test ranking eligibility.
+- Local IDs preserve source-ID order from the parser, so the tie-break matches
+  `(timestamp, source_user_id, source_movie_id)`. Duplicate local pairs fail.
+- `train_positive_pairs()` is the only edge list that may enter
+  `BipartiteCSR`. Held-out positives must not appear in that set.
+- `build_manifest()` records edition `100k`, policy id/version, eligibility
+  and cold-start defaults, per-split counts, `seed: null`, and optional
+  source URL / checksum placeholders. The example schema is
+  `data/processed/manifest.schema.json`.
 
 The same in-memory parser is bound on `graph_sampler` as `parse_movielens_100k`,
 returning `MovieLens100kRatings` (`num_users`, `num_movies`, `interactions`,

@@ -11,5 +11,9 @@ or downloads.
 The native parser `sagerec::parse_movielens_100k` reads in-memory `u.data` text
 only. It remaps source IDs to contiguous zero-based local IDs (sorted unique
 source IDs of each type), preserves rating and timestamp, and does not apply a
-split or write `processed/` artifacts. Download, on-disk preparation, and
-manifest generation remain later work. Do not commit MovieLens files.
+split or write `processed/` artifacts.
+
+ADR-003 leave-one-out assignment is `python/sagerec_prep.py` on those
+normalized rows. Train-only pairs go to `BipartiteCSR`. The example manifest
+schema is `processed/manifest.schema.json`. Download and on-disk writes remain
+later work. Do not commit MovieLens files.

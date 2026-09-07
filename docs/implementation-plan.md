@@ -1,7 +1,8 @@
 # Phased Implementation Plan
 
-ADR-001 (MovieLens 100K) and ADR-002 (GraphSAGE) are accepted. MovieLens 1M
-remains deferred. Code work may proceed within the current phase only.
+ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), and ADR-003 (per-user
+chronological leave-one-out) are accepted. MovieLens 1M remains deferred.
+Code work may proceed within the current phase only.
 
 ## Phase 1: Native foundation
 
@@ -40,17 +41,24 @@ Exit condition: clean Release build, CTest pass, extension import and smoke test
 
 ## Phase 2: Data and benchmark harness
 
-Opened in the reference-sampler slice (Phase 2 is not complete; ADR-003
-remains a proposal):
+Opened in the reference-sampler slice:
 
 - Naive Python sampler in `python/sagerec_reference_sampler.py` matching the
   native `sample_neighbors` contract (Fisher–Yates prefix, `std::mt19937_64`,
   unbiased `uniform_below`).
 - Unittest parity cases against compiled `graph_sampler` on synthetic graphs.
 
+Opened in the ADR-003 split/prep slice (Phase 2 is not complete):
+
+- In-memory leave-one-out assignment in `python/sagerec_prep.py` from
+  already-normalized 100K interactions.
+- Train-only `(user_id, movie_id)` pairs for `BipartiteCSR`.
+- Manifest schema (`data/processed/manifest.schema.json`) and builder.
+- Leakage, eligibility, timestamp-order, cold-start, and determinism tests.
+
 Still not started:
 
-- Deterministic preparation, ID mappings, split, and manifest.
+- MovieLens download, filesystem path ingestion, or on-disk `processed/` writes.
 - Performance workloads, stored timing results, and generated charts.
 
 Exit condition: selected dataset prepares reproducibly and benchmark evidence is complete.
