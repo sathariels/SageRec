@@ -10,7 +10,7 @@ choice, alternatives, rationale, and consequences.
 | ADR-001 | Dataset | MovieLens 100K / MovieLens 1M | Accepted: MovieLens 100K (1M deferred) |
 | ADR-002 | GNN | GraphSAGE / GCN | Accepted: GraphSAGE |
 | ADR-003 | Split | Per-user chronological leave-one-out / global time split | Accepted: per-user chronological leave-one-out |
-| ADR-004 | Baseline | Matrix factorization / node2vec | Proposed |
+| ADR-004 | Baseline | Matrix factorization / node2vec | Accepted: matrix factorization |
 | ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Proposed |
 
 ## Accepted
@@ -43,8 +43,8 @@ preserving the bipartite implicit-ranking setting required by the architecture.
   superseding decision accepts 1M.
 - Cold-start rules, manifests, and result provenance must record the 100K
   edition.
-- ADR-003 (split) is accepted separately; ADR-004 (baseline) remains a
-  proposal and is not settled by this dataset choice.
+- ADR-003 (split) and ADR-004 (baseline) are accepted separately; this
+  dataset choice does not settle either of them.
 
 ### ADR-002: GraphSAGE
 
@@ -72,8 +72,8 @@ contract during mini-batch training.
   matrices unless a superseding decision accepts GCN.
 - The native sampler remains the training neighborhood source; do not silently
   substitute a PyG neighbor sampler in primary experiments.
-- This decision does not accept ADR-004 or ADR-005. ADR-003 is accepted
-  separately.
+- This decision does not accept ADR-005. ADR-003 (split) and ADR-004
+  (matrix factorization) are accepted separately.
 
 ### ADR-003: Per-user chronological leave-one-out
 
@@ -132,7 +132,45 @@ short-history users enter ranking eligibility.
   source URL / checksum placeholders. Do not require a download.
 - Do not add a global time split, MovieLens 1M split paths, or on-disk
   MovieLens ingestion in this slice.
-- ADR-004 (baseline) and ADR-005 (sampler replacement) remain proposals.
+- ADR-004 (baseline) is accepted separately; ADR-005 remains a proposal.
+
+### ADR-004: Matrix factorization
+
+- Date: 2026-09-08
+- Owner: Nithilan Kumaran
+- Status: Accepted
+
+**Context:** The GNN-versus-baseline quality comparison cannot start until
+the owner selects the non-GNN recommender. The two allowed options were
+implicit-feedback matrix factorization and node2vec. The baseline must use
+the same split, eligible users, candidate protocol, and ranking metrics as
+the future GraphSAGE model (ADR-002, ADR-003).
+
+**Choice:** Implicit-feedback matrix factorization.
+
+**Alternatives:** node2vec (or another graph-walk embedding baseline), or
+implementing both families before the first quality comparison.
+
+**Rationale:** The owner accepted matrix factorization on 2026-09-08.
+MF is a direct, interpretable recommender baseline: it scores user–item
+pairs from latent factors without introducing graph-walk hyperparameters
+that would confound the GraphSAGE comparison. node2vec would mix random-walk
+design choices with the GNN neighborhood-sampling story.
+
+**Consequences:**
+
+- Phase 3 implements implicit-feedback matrix factorization with the same
+  split, candidate construction, eligibility, and ranking protocol as the
+  future GNN (Recall@10 and NDCG@10, per-user then macro-averaged).
+- Do not add node2vec model code, node2vec configs, or MF-versus-node2vec
+  experiment matrices unless a superseding ADR accepts node2vec.
+- The shared scoring interface and ranking evaluator own metric logic;
+  the baseline (and later GraphSAGE) only produce ranking scores.
+- Training negatives must not overlap known positives in the training
+  scope. Held-out positives must not enter the MF training edge set.
+- This slice verifies the protocol on tiny deterministic synthetic data.
+  Do not publish MovieLens 100K quality numbers until a real 100K run is
+  stored under `results/` with provenance. ADR-005 remains a proposal.
 
 ### Disjoint global node IDs
 
@@ -142,12 +180,6 @@ type recovery constant-time. This convention is architecture-neutral and may be
 changed only through a superseding decision record.
 
 ## Proposals
-
-### ADR-004: Matrix factorization baseline
-
-Proposed choice: implicit-feedback matrix factorization with the same negative
-sampling and ranking protocol. It is a direct, interpretable recommender baseline
-and avoids conflating graph-walk hyperparameters with the GNN comparison.
 
 ### ADR-005: Uniform sampling without replacement
 

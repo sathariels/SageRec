@@ -50,7 +50,8 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 - Python construction, lifetime, exception, sampling, and in-memory parser
   smoke tests (`local_pairs()` CSR handoff and `GraphError` on bad input).
 - CTest `python_binding_smoke` discovers `python/tests`, including
-  native-vs-reference sampler parity. PYTHONPATH includes the build
-  directory and `python/` so `sagerec_reference_sampler` imports cleanly.
+  native-vs-reference sampler parity, ADR-003 prep tests, and the Phase 3
+  MF ranking smoke. PYTHONPATH includes the build directory and `python/`
+  so `sagerec_*` modules import cleanly.
 
 Do not add GNN training, downloads, or a second sampler module name.

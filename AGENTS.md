@@ -10,17 +10,18 @@ and an agent-friendly repository.
 ## Current phase
 
 Phase 1 native foundation is verified. ADR-001 (MovieLens 100K), ADR-002
-(GraphSAGE), and ADR-003 (per-user chronological leave-one-out) are accepted;
-MovieLens 1M is deferred. The verified slice is the C++ CSR graph, seeded
-neighbor sampler, MovieLens 100K `u.data` parser, `graph_sampler` bindings
-(including `parse_movielens_100k`), a naive Python reference sampler with
-native parity tests, and CI.
+(GraphSAGE), ADR-003 (per-user chronological leave-one-out), and ADR-004
+(matrix factorization) are accepted; MovieLens 1M is deferred. The verified
+slice includes the C++ CSR graph, seeded neighbor sampler, MovieLens 100K
+`u.data` parser, `graph_sampler` bindings, a naive Python reference sampler
+with native parity tests, in-memory ADR-003 leave-one-out prep, an implicit
+MF baseline, a shared ranking evaluator, and CI.
 
-Phase 2 is open for the reference sampler, parity tests, and the in-memory
-MovieLens 100K leave-one-out split/prep slice only. Do not implement MovieLens
-download, on-disk dataset prep, GNN training, the baseline, benchmark charts,
-or remaining Phase 2–5 work unless a later task explicitly asks. Do not add
-MovieLens 1M or GCN paths. Do not accept ADR-004 or ADR-005.
+Phase 3 is open for the matrix-factorization baseline and the shared
+Recall@10 / NDCG@10 evaluator (tiny deterministic synthetic path). Phase 2
+download, on-disk dataset prep, and timing charts remain closed unless
+already present. Do not implement GraphSAGE training (Phase 4). Do not add
+MovieLens 1M or GCN paths. Do not accept ADR-005.
 
 ## Read order
 
@@ -43,10 +44,12 @@ Accepted and recorded in `docs/decisions.md`:
 - ADR-002: GraphSAGE (not GCN).
 - ADR-003: Per-user chronological leave-one-out (min 3 interactions; cold-start
   users keep all rows in train and are excluded from ranking eligibility).
+- ADR-004: Implicit-feedback matrix factorization (not node2vec).
 
-ADR-004 (baseline) and ADR-005 (sampler replacement) remain proposals. The
-native sampler uses the proposed ADR-005 defaults as its implementation
-contract; do not treat that as an accepted experiment decision.
+ADR-005 (sampler replacement) remains a proposal. The native sampler uses the
+proposed ADR-005 defaults as its implementation contract; do not treat that
+as an accepted experiment decision. Do not add node2vec unless a superseding
+ADR accepts it.
 
 Record any new owner choice in `docs/decisions.md` before creating dependent
 code or configuration. Do not infer MovieLens 1M or GCN.

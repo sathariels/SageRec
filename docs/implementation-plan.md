@@ -1,8 +1,11 @@
 # Phased Implementation Plan
 
-ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), and ADR-003 (per-user
-chronological leave-one-out) are accepted. MovieLens 1M remains deferred.
-Code work may proceed within the current phase only.
+ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
+chronological leave-one-out), and ADR-004 (matrix factorization) are
+accepted. MovieLens 1M remains deferred. ADR-005 remains a proposal.
+Code work may proceed within the current open phase only. Phase 2
+download, on-disk prep, and timing charts stay closed. Phase 4 GraphSAGE
+training is not open.
 
 ## Phase 1: Native foundation
 
@@ -65,11 +68,32 @@ Exit condition: selected dataset prepares reproducibly and benchmark evidence is
 
 ## Phase 3: Baseline
 
-- Implement accepted baseline and common scoring interface.
-- Add tiny deterministic training tests.
-- Evaluate through the shared ranking evaluator.
+Opened in the ADR-004 matrix-factorization slice:
 
-Exit condition: baseline produces reproducible Recall@10 and NDCG@10.
+- Common `PairScorer` interface (`python/sagerec_scoring.py`); models expose
+  ranking scores only. Metric logic lives in the shared evaluator.
+- Implicit-feedback MF baseline (`python/sagerec_baseline.py`): seeded NumPy
+  logistic SGD with configurable factors, epochs, learning rate, L2, and
+  negatives-per-positive.
+- Training negative sampling (`python/sagerec_negatives.py`) that excludes
+  known positives in the training scope.
+- Shared ranking evaluator (`python/sagerec_metrics.py`): per-user
+  Recall@10 and NDCG@10 with macro averaging, ADR-003 eligibility, and
+  train (plus validation when scoring test) candidate filtering.
+- Tiny deterministic unittest smoke: synthetic interactions →
+  `sagerec_prep` leave-one-out → brief seeded MF → finite metrics in
+  `[0, 1]` that match across two runs. Leakage checks confirm held-out
+  positives are absent from the MF train edge set / train CSR.
+
+Still not started:
+
+- MovieLens 100K baseline quality numbers (requires Phase 2 download /
+  on-disk prep; do not invent them).
+- GraphSAGE training (Phase 4).
+- node2vec (rejected unless a superseding ADR accepts it).
+
+Exit condition: baseline produces reproducible Recall@10 and NDCG@10 on
+the tiny synthetic path (verification only, not a MovieLens 100K result).
 
 ## Phase 4: GNN
 

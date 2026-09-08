@@ -15,7 +15,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ python3-dev pybind11-dev python3-pybind11
+          sudo apt-get install -y cmake g++ python3-dev pybind11-dev python3-pybind11 python3-numpy
 
       - name: Configure Release
         run: cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++

@@ -164,11 +164,45 @@ native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
 
 The GNN family is GraphSAGE (ADR-002). Layer implementation remains Phase 4.
 
+## Baseline (ADR-004)
+
+Phase 3 implements implicit-feedback matrix factorization, not node2vec.
+`python/sagerec_baseline.py` fits user and item factors with logistic SGD
+on training positives plus uniform negatives. It consumes
+`SplitResult.train_positive_pairs()` only. Held-out positives must not
+enter that edge set or a train-only `BipartiteCSR` built from it.
+
+Configuration is explicit: factor count, epochs, learning rate, L2,
+negatives per positive, and seed. NumPy is the v1 numeric dependency;
+do not add node2vec or extra ML libraries for this slice.
+
+## Scoring interface
+
+Models implement `sagerec_scoring.PairScorer.score_pairs(user_ids, item_ids)`
+and return one higher-is-better score per aligned pair. The baseline
+(`ImplicitMF`) satisfies that protocol. GraphSAGE must use the same
+protocol later so the evaluator stays model-agnostic.
+
 ## Evaluation boundary
 
-Evaluation owns candidate filtering, scoring, ranking, and metric aggregation.
-Models expose scores or embeddings but must not implement model-specific metric
-logic. This keeps GNN/baseline comparisons identical.
+Evaluation owns candidate filtering, ranking, and metric aggregation
+(`python/sagerec_metrics.py`). Models expose scores or embeddings but must
+not implement model-specific metric logic. This keeps GNN/baseline
+comparisons identical.
+
+The shared protocol for this slice:
+
+- Eligible users only (ADR-003: at least three interactions). Cold-start
+  users are omitted from ranking.
+- One held-out positive per eligible user on the target split
+  (validation or test).
+- Candidates are every movie in `[0, num_movies)` except that user's
+  training positives, and except validation positives when the target
+  split is test. The evaluation positive stays in the candidate set.
+- Rank by score descending; ties break on smaller `movie_id`.
+- Report Recall@10 and NDCG@10 per user, then macro-average.
+- Tiny synthetic unittest metrics are protocol verification, not a
+  MovieLens 100K quality claim.
 
 ## Benchmark boundary
 

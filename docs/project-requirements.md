@@ -42,10 +42,11 @@ both recommendation quality and measured native sampling performance.
 
 ### Baseline
 
-- Implement the accepted matrix-factorization or node2vec baseline.
+- Implement implicit-feedback matrix factorization (ADR-004). Do not add
+  node2vec unless a superseding decision accepts it.
 - Train and evaluate it on the exact same split and ranking candidates as the GNN.
-- Prefer matrix factorization unless node2vec is chosen for a documented reason;
-  matrix factorization offers a direct recommendation baseline and simpler parity.
+- Expose scores through the shared `PairScorer` interface; do not embed
+  Recall/NDCG logic in the model.
 
 ### Evaluation
 

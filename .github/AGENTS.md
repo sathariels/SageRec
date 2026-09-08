@@ -8,4 +8,5 @@ GitHub Actions here must verify the native foundation without side effects.
   cases must keep using in-memory fixtures only.
 - Do not upload checkpoints, compiled extensions, or generated artifacts as
   source. Cache build directories only if that remains optional and local.
-- Do not add MovieLens 1M or GCN jobs.
+- Do not add MovieLens 1M or GCN jobs. Phase 3 Python tests need NumPy
+  (`python3-numpy`); they must keep using in-memory synthetic fixtures.

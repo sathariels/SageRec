@@ -4,8 +4,9 @@ SageRec is a graph-neural-network recommendation engine with a C++ graph
 preprocessing and neighbor-sampling backend and a Python/PyTorch Geometric
 training stack. The verified slice is the native CSR graph, seeded sampler,
 MovieLens 100K `u.data` parser, `graph_sampler` bindings, a Python reference
-sampler, and in-memory ADR-003 leave-one-out prep. GNN training, MovieLens
-download, the baseline, and benchmark charts are not implemented yet.
+sampler, in-memory ADR-003 leave-one-out prep, an implicit matrix-factorization
+baseline, and a shared Recall@10 / NDCG@10 evaluator. GNN training, MovieLens
+download, and benchmark charts are not implemented yet.
 
 ## Intended system
 
@@ -32,7 +33,7 @@ backend rather than a demonstration wrapper.
 | Directory | Responsibility |
 | --- | --- |
 | `cpp/` | Native CSR construction, ML-100K parser, sampling, bindings, tests |
-| `python/` | Binding stubs, reference sampler, in-memory split/prep, tests |
+| `python/` | Binding stubs, reference sampler, split/prep, MF baseline, ranking metrics, tests |
 | `data/` | Local raw inputs and reproducible processed artifacts |
 | `results/` | Metrics, benchmark summaries, and charts |
 | `docs/` | Architecture, decisions, protocols, and plans |
@@ -54,16 +55,20 @@ Recorded in [docs/decisions.md](docs/decisions.md):
    three interactions are cold-start: all rows stay in train and the user is
    excluded from ranking eligibility. Timestamp ties break on
    `(user_id, movie_id)` (local IDs; equivalent to source-ID order).
+4. **ADR-004 (accepted, 2026-09-08, Nithilan Kumaran):** Implicit-feedback
+   matrix factorization, not node2vec. Phase 3 uses the same split, eligibility,
+   candidate filtering, and Recall@10 / NDCG@10 protocol as the future GNN.
 
-ADR-004 (baseline) and ADR-005 (sampler replacement) remain proposals. The
-native sampler uses the proposed ADR-005 defaults as its implementation
-contract: uniform sampling without replacement, full neighborhood when
-`k >= degree`, empty result for isolated nodes or `k = 0`.
+ADR-005 (sampler replacement) remains a proposal. The native sampler uses
+the proposed ADR-005 defaults as its implementation contract: uniform
+sampling without replacement, full neighborhood when `k >= degree`, empty
+result for isolated nodes or `k = 0`. Do not add node2vec unless a
+superseding ADR accepts it.
 
 ## Build and test the native foundation
 
 Dependencies on Debian/Ubuntu: `cmake`, a C++17 compiler, `python3-dev`,
-`pybind11-dev`, and `python3-pybind11`.
+`pybind11-dev`, `python3-pybind11`, and `python3-numpy` (Phase 3 MF baseline).
 
 ```bash
 cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
@@ -75,9 +80,9 @@ Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at
 Clang without a discoverable `libstdc++` will fail at configure time.
 
 CTest runs the native CSR/sampler cases and the Python unittest discover
-suite (binding smoke tests, native-vs-reference sampler parity, and
-leave-one-out prep/leakage tests). To run those Python tests directly after
-a successful build:
+suite (binding smoke tests, native-vs-reference sampler parity,
+leave-one-out prep/leakage tests, and the Phase 3 MF ranking smoke). To run
+those Python tests directly after a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
@@ -93,6 +98,22 @@ benchmark reports are not implemented.
 train-only `(user_id, movie_id)` pairs for `BipartiteCSR`. It does not
 download MovieLens data or write `data/processed/`. The manifest schema is
 `data/processed/manifest.schema.json`.
+
+The Phase 3 baseline is implicit-feedback matrix factorization
+(`python/sagerec_baseline.py`) behind `sagerec_scoring.PairScorer`. Training
+negatives (`python/sagerec_negatives.py`) exclude known training positives.
+`python/sagerec_metrics.py` ranks candidates and reports macro-averaged
+Recall@10 and NDCG@10 for ADR-003-eligible users, filtering train positives
+(and validation positives when the target split is test). Tiny synthetic
+unittests in `python/tests/test_mf_baseline.py` are protocol verification
+only; they are not MovieLens 100K quality results.
+
+```bash
+PYTHONPATH=build:python python3 -m unittest python/tests/test_mf_baseline.py -v
+```
+
+The unittest discover command in the native-build section also runs that
+smoke. GraphSAGE training is not implemented.
 
 `import graph_sampler` loads the compiled extension. Construction takes local
 `(user_id, movie_id)` pairs on a synthetic graph; do not vendor MovieLens data.
@@ -113,11 +134,12 @@ Parser tests use tiny strings only.
 - A naive Python reference sampler with native parity tests (timing
   charts and stored benchmark numbers not yet).
 - Deterministic in-memory MovieLens 100K leave-one-out prep with leakage tests.
+- A seeded implicit matrix-factorization baseline and shared ranking
+  evaluator with tiny synthetic Recall@10 / NDCG@10 smoke tests
+  (verification only, not a MovieLens 100K leaderboard).
 - A PyTorch Geometric GraphSAGE model trained with negative sampling and the
   native sampler (not yet).
-- A matrix-factorization or node2vec baseline (ADR-004 still proposed).
-- Leakage-safe evaluation with Recall@10 and NDCG@10 (not yet).
-- Reproducible result tables and charts (not yet).
+- Leakage-safe MovieLens 100K evaluation tables and charts (not yet).
 
 See [docs/project-requirements.md](docs/project-requirements.md) for acceptance
 criteria and [docs/architecture.md](docs/architecture.md) for component contracts.

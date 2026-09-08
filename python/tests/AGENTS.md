@@ -16,6 +16,10 @@ works). Prefer `PYTHONPATH=build:python`.
 - Cover ADR-003 leave-one-out assignment, cold-start eligibility, timestamp
   tie-break, determinism, manifest fields, and leakage (validation/test
   positives absent from train pairs and from a train-only `BipartiteCSR`).
-- Do not add training, download, baseline, or timing-benchmark tests in this
+- Cover Phase 3 MF baseline and shared ranking metrics on tiny synthetic
+  data: Recall@10 / NDCG@10 bounds, macro averaging, ADR-003 eligibility,
+  candidate filtering, negative-sample validity, train-edge leakage, and
+  seeded reproducibility. Label those metrics as verification only.
+- Do not add download, GraphSAGE training, or timing-benchmark tests in this
   directory until those phases are explicitly opened.
 - Keep type hints on test helpers that form part of a public-looking fixture.
