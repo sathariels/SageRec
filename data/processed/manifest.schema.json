@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sagerec.local/schemas/movielens-100k-split-manifest.json",
   "title": "SageRec MovieLens 100K split manifest",
-  "description": "Provenance for an in-memory ADR-003 leave-one-out split. Placeholders for source_url and checksum are allowed; this schema does not require a download.",
+  "description": "Provenance for an ADR-003 MovieLens 100K leave-one-out split. On-disk prep fills source_url, checksum, and license; in-memory helpers may still leave those null.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -78,11 +78,11 @@
     },
     "source_url": {
       "type": ["string", "null"],
-      "description": "Optional GroupLens / archive URL. Not fetched by prep helpers."
+      "description": "GroupLens / archive URL used to obtain u.data. Filled by on-disk prep when known."
     },
     "checksum": {
       "type": ["string", "null"],
-      "description": "Optional ratings-file checksum placeholder."
+      "description": "Checksum of the archive (md5:…) or ratings file (sha256:…) consumed by prep."
     },
     "license": {
       "type": ["string", "null"]

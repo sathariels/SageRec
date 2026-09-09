@@ -20,7 +20,7 @@ PYBIND11_MODULE(graph_sampler, m) {
       "parse_movielens_100k accepts tab-separated u.data text only; it does "
       "not read files, download data, apply a split, or build a CSR. "
       "sample_neighbors(node_id, k, seed) uses uniform sampling without "
-      "replacement (proposed ADR-005 implementation contract).";
+      "replacement (ADR-005).";
 
   py::register_exception<sagerec::GraphError>(m, "GraphError", PyExc_ValueError);
 

@@ -5,7 +5,7 @@ Consumes CSR ``offsets`` / ``neighbors`` views (typically from
 or ingest MovieLens files.
 
 The sampling contract matches ``sagerec::BipartiteCSR::sample_neighbors``
-(proposed ADR-005 implementation defaults; ADR-005 remains a proposal):
+(ADR-005: uniform sampling without replacement):
 
 - Uniform without replacement
 - ``k == 0`` or degree ``0`` -> empty sequence

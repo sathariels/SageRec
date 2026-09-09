@@ -1,0 +1,51 @@
+{
+  "model": "implicit_mf",
+  "dataset_edition": "100k",
+  "source_url": "https://files.grouplens.org/datasets/movielens/ml-100k.zip",
+  "checksum": "md5:0e33842e24a9c977be4e0107933c0723",
+  "license": "GroupLens MovieLens research license; see ml-100k-README.txt in the archive",
+  "split_policy_id": "per_user_chronological_leave_one_out",
+  "split_policy_version": "adr-003-v1",
+  "min_interactions_for_eval": 3,
+  "cold_start_policy": "all_to_train_exclude_from_eval",
+  "seed": 7,
+  "git_commit": "00940b6489d2d9fac1cee6950df580935d1e939f",
+  "generated_at": "2026-09-09T17:23:59.503811+00:00",
+  "python": "3.12.3",
+  "numpy": "2.4.4",
+  "platform": {
+    "system": "Linux",
+    "release": "6.12.94+",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "hyperparams": {
+    "n_factors": 16,
+    "n_epochs": 1,
+    "learning_rate": 0.05,
+    "n_negatives": 2,
+    "l2": 0.01,
+    "init_std": 0.1
+  },
+  "metrics": {
+    "k": 10,
+    "split": "test",
+    "recall_at_k": 0.03817603393425239,
+    "ndcg_at_k": 0.020303175177886473,
+    "n_evaluated_users": 943
+  },
+  "eligibility": {
+    "users": 943,
+    "movies": 1682,
+    "interactions": {
+      "total": 100000,
+      "train": 98114,
+      "validation": 943,
+      "test": 943
+    },
+    "eligible_users": 943,
+    "cold_start_users": 0,
+    "evaluated_users": 943
+  },
+  "note": "Single-seed MovieLens 100K implicit-MF run on the ADR-003 split. Not a GraphSAGE result and not a multi-seed leaderboard."
+}

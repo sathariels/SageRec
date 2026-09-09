@@ -24,7 +24,7 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 - `sagerec::BipartiteCSR` in `include/sagerec/bipartite_csr.hpp`.
 - Local `(user_id, movie_id)` construction; bidirectional train-only adjacency.
 - Duplicate interactions are deduplicated (proposed default).
-- `sample_neighbors(node_id, k, seed)` uses proposed ADR-005 defaults.
+- `sample_neighbors(node_id, k, seed)` uses accepted ADR-005 without-replacement.
 - Invalid IDs and `k < 0` throw `sagerec::GraphError` with the expected range.
 - `sagerec::parse_movielens_100k` in `include/sagerec/movielens_100k.hpp` parses
   in-memory tab-separated `u.data` text. It is not part of `BipartiteCSR`.
@@ -50,8 +50,10 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 - Python construction, lifetime, exception, sampling, and in-memory parser
   smoke tests (`local_pairs()` CSR handoff and `GraphError` on bad input).
 - CTest `python_binding_smoke` discovers `python/tests`, including
-  native-vs-reference sampler parity, ADR-003 prep tests, and the Phase 3
-  MF ranking smoke. PYTHONPATH includes the build directory and `python/`
-  so `sagerec_*` modules import cleanly.
+  native-vs-reference sampler parity, ADR-003 prep tests, Phase 2
+  download/prep fixture tests, and the Phase 3 MF ranking smoke.
+  PYTHONPATH includes the build directory and `python/` so `sagerec_*`
+  modules import cleanly.
 
-Do not add GNN training, downloads, or a second sampler module name.
+Do not add GNN training, native downloads, or a second sampler module name.
+MovieLens download stays in Python (`sagerec_download`).

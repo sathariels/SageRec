@@ -11,7 +11,7 @@ choice, alternatives, rationale, and consequences.
 | ADR-002 | GNN | GraphSAGE / GCN | Accepted: GraphSAGE |
 | ADR-003 | Split | Per-user chronological leave-one-out / global time split | Accepted: per-user chronological leave-one-out |
 | ADR-004 | Baseline | Matrix factorization / node2vec | Accepted: matrix factorization |
-| ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Proposed |
+| ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Accepted: uniform without replacement |
 
 ## Accepted
 
@@ -72,8 +72,8 @@ contract during mini-batch training.
   matrices unless a superseding decision accepts GCN.
 - The native sampler remains the training neighborhood source; do not silently
   substitute a PyG neighbor sampler in primary experiments.
-- This decision does not accept ADR-005. ADR-003 (split) and ADR-004
-  (matrix factorization) are accepted separately.
+- ADR-003 (split), ADR-004 (matrix factorization), and ADR-005
+  (uniform sampling without replacement) are accepted separately.
 
 ### ADR-003: Per-user chronological leave-one-out
 
@@ -132,7 +132,7 @@ short-history users enter ranking eligibility.
   source URL / checksum placeholders. Do not require a download.
 - Do not add a global time split, MovieLens 1M split paths, or on-disk
   MovieLens ingestion in this slice.
-- ADR-004 (baseline) is accepted separately; ADR-005 remains a proposal.
+- ADR-004 (baseline) and ADR-005 (sampler semantics) are accepted separately.
 
 ### ADR-004: Matrix factorization
 
@@ -170,7 +170,8 @@ design choices with the GNN neighborhood-sampling story.
   scope. Held-out positives must not enter the MF training edge set.
 - This slice verifies the protocol on tiny deterministic synthetic data.
   Do not publish MovieLens 100K quality numbers until a real 100K run is
-  stored under `results/` with provenance. ADR-005 remains a proposal.
+  stored under `results/` with provenance. ADR-005 (sampler semantics)
+  is accepted separately.
 
 ### Disjoint global node IDs
 
@@ -179,15 +180,50 @@ Users occupy `[0, num_users)` and movies occupy
 type recovery constant-time. This convention is architecture-neutral and may be
 changed only through a superseding decision record.
 
-## Proposals
-
 ### ADR-005: Uniform sampling without replacement
 
-Proposed choice: sample up to `k` unique neighbors; return all neighbors when
-degree is at most `k`. It avoids duplicated messages within a sampled hop and is
-straightforward to compare with a Python reference.
+- Date: 2026-09-09
+- Owner: Nithilan Kumaran
+- Status: Accepted
 
-The Phase 1 native sampler implements these proposed defaults as the current
-code contract so CSR construction and `graph_sampler` have defined behavior.
-ADR-005 itself remains a proposal, not an accepted experiment decision. Changing
-replacement policy still requires accepting or superseding this ADR.
+**Context:** Neighbor sampling must have one owner-selected replacement policy
+so the C++ sampler, the Python reference sampler, and later GraphSAGE
+mini-batches share a single contract. The two allowed options were uniform
+sampling without replacement and sampling with replacement. Phase 1 already
+implemented without-replacement defaults so CSR construction and
+`graph_sampler` had defined behavior; that implementation contract is now
+the accepted experiment decision.
+
+**Choice:** Uniform sampling without replacement.
+
+- Sample up to `k` unique neighbors.
+- Return the full stored neighborhood (CSR order) when `k >= degree`.
+- Return empty for isolated nodes or `k = 0`.
+- When `0 < k < degree`, return `k` unique neighbors in Fisher–Yates prefix
+  order from a per-call `std::mt19937_64` seeded by the explicit `seed`.
+
+**Alternatives:** Sampling with replacement (duplicates allowed within a hop),
+or leaving replacement unspecified.
+
+**Rationale:** The owner accepted uniform sampling without replacement on
+2026-09-09. It avoids duplicated messages within a sampled hop, matches the
+already-shipped native and Python reference samplers, and is straightforward
+to compare for parity tests. With-replacement semantics would change both
+implementations and every parity/benchmark comparison.
+
+**Consequences:**
+
+- The native sampler (`sagerec::BipartiteCSR::sample_neighbors`) and the
+  Python reference (`python/sagerec_reference_sampler.py`) must keep
+  without-replacement semantics, including the Fisher–Yates prefix and
+  unbiased `uniform_below` draw.
+- Changing replacement policy, allowing duplicate neighbors within a hop,
+  or switching the reference/native pair to with-replacement requires a
+  superseding ADR.
+- Benchmarks and GraphSAGE training (when Phase 4 opens) must use this
+  contract; do not silently substitute a with-replacement PyG sampler.
+
+## Proposals
+
+None open. MovieLens 1M, GCN, and node2vec remain deferred/rejected unless a
+superseding ADR accepts them.

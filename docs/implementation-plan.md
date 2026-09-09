@@ -1,10 +1,10 @@
 # Phased Implementation Plan
 
 ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
-chronological leave-one-out), and ADR-004 (matrix factorization) are
-accepted. MovieLens 1M remains deferred. ADR-005 remains a proposal.
-Code work may proceed within the current open phase only. Phase 2
-download, on-disk prep, and timing charts stay closed. Phase 4 GraphSAGE
+chronological leave-one-out), ADR-004 (matrix factorization), and ADR-005
+(uniform sampling without replacement) are accepted. MovieLens 1M remains
+deferred. Phase 2 download and on-disk `processed/` prep are open for
+MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 GraphSAGE
 training is not open.
 
 ## Phase 1: Native foundation
@@ -13,8 +13,7 @@ Completed in the first verified slice:
 
 - Define native public contracts and CMake targets.
 - Implement validated train-only CSR construction from explicit interactions.
-- Implement seeded sampling using the proposed ADR-005 defaults as the
-  implementation contract (ADR-005 is still proposed).
+- Implement seeded sampling using the ADR-005 without-replacement contract.
 - Add native tests for construction, edge cases, and seed reproducibility.
 - Add thin pybind11 bindings, Python binding tests, and Release CI.
 
@@ -37,8 +36,8 @@ Completed in the parser-binding slice:
 
 Still not started in Phase 1:
 
-- MovieLens download or file-path ingestion helpers.
-- Do not add MovieLens 1M parsers, paths, or downloads.
+- Do not add MovieLens 1M parsers, paths, or downloads. Download and
+  on-disk prep belong to the opened Phase 2 slice, not the native parser.
 
 Exit condition: clean Release build, CTest pass, extension import and smoke test pass.
 
@@ -59,9 +58,21 @@ Opened in the ADR-003 split/prep slice (Phase 2 is not complete):
 - Manifest schema (`data/processed/manifest.schema.json`) and builder.
 - Leakage, eligibility, timestamp-order, cold-start, and determinism tests.
 
+Opened in the Phase 2 download / on-disk prep slice:
+
+- Official GroupLens MovieLens 100K download (`python/sagerec_download.py`)
+  with published archive MD5 verification and `u.data` extraction under
+  `data/raw/` (gitignored).
+- Path/bytes ingestion through `graph_sampler.parse_movielens_100k` and
+  ADR-003 `sagerec_prep`, writing `data/processed/` artifacts plus a filled
+  manifest (`python/sagerec_dataset.py`).
+- Thin scripts: `scripts/download_movielens_100k.py`,
+  `scripts/prepare_movielens_100k.py`.
+- Fixture tests for checksum, zip layout, path ingestion, and manifest
+  writes. Live download is optional and skipped in default CI.
+
 Still not started:
 
-- MovieLens download, filesystem path ingestion, or on-disk `processed/` writes.
 - Performance workloads, stored timing results, and generated charts.
 
 Exit condition: selected dataset prepares reproducibly and benchmark evidence is complete.
@@ -87,10 +98,11 @@ Opened in the ADR-004 matrix-factorization slice:
 
 Still not started:
 
-- MovieLens 100K baseline quality numbers (requires Phase 2 download /
-  on-disk prep; do not invent them).
 - GraphSAGE training (Phase 4).
 - node2vec (rejected unless a superseding ADR accepts it).
+- Do not invent MovieLens 100K quality numbers. A real single-seed 100K MF
+  run is stored under `results/mf_movielens_100k.json` when generated from
+  the official archive (not a GraphSAGE or multi-seed leaderboard).
 
 Exit condition: baseline produces reproducible Recall@10 and NDCG@10 on
 the tiny synthetic path (verification only, not a MovieLens 100K result).

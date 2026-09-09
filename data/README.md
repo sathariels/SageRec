@@ -1,19 +1,19 @@
 # Data Layout
 
-`raw/` is reserved for an owner-downloaded MovieLens dataset. `processed/` is
-reserved for normalized interactions, ID mappings, split assignments, manifests,
-and other reproducible products. Both are ignored except for their guidance files.
+`raw/` holds an owner- or script-downloaded MovieLens 100K archive and extracted
+`u.data`. `processed/` holds normalized assignments, train-only pairs, ID maps,
+and a filled manifest. Both are gitignored except for guidance files and the
+manifest schema.
 
 ADR-001 accepts MovieLens 100K (tab-separated `u.data`: source user id, movie
 id, rating, timestamp). MovieLens 1M is deferred; do not add 1M paths, configs,
 or downloads.
 
-The native parser `sagerec::parse_movielens_100k` reads in-memory `u.data` text
-only. It remaps source IDs to contiguous zero-based local IDs (sorted unique
-source IDs of each type), preserves rating and timestamp, and does not apply a
-split or write `processed/` artifacts.
+Official archive: `https://files.grouplens.org/datasets/movielens/ml-100k.zip`
+(published MD5 `0e33842e24a9c977be4e0107933c0723`).
 
-ADR-003 leave-one-out assignment is `python/sagerec_prep.py` on those
-normalized rows. Train-only pairs go to `BipartiteCSR`. The example manifest
-schema is `processed/manifest.schema.json`. Download and on-disk writes remain
-later work. Do not commit MovieLens files.
+The native parser `sagerec::parse_movielens_100k` reads in-memory `u.data` text
+only. Phase 2 Python helpers download the zip and feed file/byte contents into
+that parser, then reuse ADR-003 `python/sagerec_prep.py` for the split. Train-only
+pairs go to `BipartiteCSR`. The manifest schema is `processed/manifest.schema.json`.
+Do not commit MovieLens files.

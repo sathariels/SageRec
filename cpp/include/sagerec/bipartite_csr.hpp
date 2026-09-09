@@ -62,7 +62,7 @@ class BipartiteCSR {
   /// Concatenated neighborhoods. Lifetime: this object.
   const std::vector<NodeId>& neighbors() const noexcept { return neighbors_; }
 
-  /// Uniform sample without replacement (proposed ADR-005 implementation contract).
+  /// Uniform sample without replacement (ADR-005).
   ///
   /// - k == 0 or degree == 0: empty result
   /// - k >= degree: full neighborhood in CSR order

@@ -89,6 +89,8 @@ construction:
 - No split field is assigned here. ADR-003 leave-one-out runs in Python
   (`sagerec_prep.split_interactions`) on these normalized rows. The parser
   never downloads data, reads a filesystem path, or parses MovieLens 1M.
+  Phase 2 path ingestion lives in `python/sagerec_dataset.py` and feeds
+  file or byte contents into this in-memory parser.
 - `local_pairs()` yields the `(user_id, movie_id)` vector that
   `BipartiteCSR::from_interactions` already accepts. Callers must still restrict
   that list to training positives before building a sampling graph.
@@ -101,7 +103,8 @@ nonpositive source IDs, or a duplicate source user-movie pair.
 
 `python/sagerec_prep.py` assigns splits in memory to already-normalized
 interactions (parser structs or equivalent). It does not remap IDs, read
-paths, or download data:
+paths, or download data. Phase 2 on-disk prep (`python/sagerec_dataset.py`)
+reuses this function and writes `data/processed/` artifacts:
 
 - Eligible users have at least three interactions. After sorting each user's
   rows by `(timestamp, user_id, movie_id)` ascending, the last row is test,
@@ -113,9 +116,26 @@ paths, or download data:
 - `train_positive_pairs()` is the only edge list that may enter
   `BipartiteCSR`. Held-out positives must not appear in that set.
 - `build_manifest()` records edition `100k`, policy id/version, eligibility
-  and cold-start defaults, per-split counts, `seed: null`, and optional
-  source URL / checksum placeholders. The example schema is
-  `data/processed/manifest.schema.json`.
+  and cold-start defaults, per-split counts, `seed: null`, and source URL /
+  checksum / license when the caller supplies them. On-disk prep fills those
+  provenance fields. The schema is `data/processed/manifest.schema.json`.
+
+### MovieLens 100K download and on-disk prep
+
+`python/sagerec_download.py` fetches the official GroupLens 100K zip
+(`https://files.grouplens.org/datasets/movielens/ml-100k.zip`), verifies the
+published archive MD5 `0e33842e24a9c977be4e0107933c0723` when that default URL
+is used, and extracts `u.data` under a caller-supplied `data/raw/` directory.
+MovieLens 1M URLs are rejected. If TLS verification fails against an expired
+GroupLens certificate, a second attempt without TLS verification is allowed
+only when an expected archive MD5 will still be checked.
+
+`python/sagerec_dataset.py` reads `u.data` from a path or bytes, calls
+`graph_sampler.parse_movielens_100k` and `sagerec_prep.split_interactions`,
+asserts that train pairs are disjoint from held-out positives, and writes
+`assignments.jsonl`, `train_pairs.json`, `mappings.json`, and a filled
+`manifest.json` under `data/processed/`. Those generated files are gitignored;
+the schema stays tracked.
 
 The same in-memory parser is bound on `graph_sampler` as `parse_movielens_100k`,
 returning `MovieLens100kRatings` (`num_users`, `num_movies`, `interactions`,
@@ -131,13 +151,12 @@ The intended Python-facing abstraction is conceptually:
 
 Batch and multi-hop variants may be added after the minimal API is correct. The
 accepted contract must state replacement behavior, output ordering, deterministic
-seed semantics, invalid-node behavior, and concurrency guarantees. Proposed
-default: uniform sampling without replacement, return the full neighborhood when
-`k >= degree`, and return empty for isolated nodes or `k = 0`.
+seed semantics, invalid-node behavior, and concurrency guarantees.
 
-Phase 1 implements those proposed ADR-005 defaults as the current
-`graph_sampler` contract. ADR-005 remains a proposal. The naive Python
-reference in `python/sagerec_reference_sampler.py` consumes CSR
+ADR-005 accepts uniform sampling without replacement, the full neighborhood when
+`k >= degree`, and empty results for isolated nodes or `k = 0`. Phase 1
+implemented that contract; changing replacement requires a superseding ADR. The
+naive Python reference in `python/sagerec_reference_sampler.py` consumes CSR
 `offsets`/`neighbors` views and implements the same contract, including the
 native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
 `uniform_below` draw. Current behavior:

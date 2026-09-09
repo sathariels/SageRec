@@ -6,5 +6,7 @@ seed, counts, and generating command/config. Regeneration must not depend on
 timestamps, directory ordering, or unstated random state. Do not commit large outputs.
 
 `manifest.schema.json` is the ADR-003 MovieLens 100K split-manifest contract.
-On-disk prepared ratings are not generated in this slice; Python prep stays
-in-memory under `python/sagerec_prep.py`.
+Phase 2 on-disk prep (`python/sagerec_dataset.py`) writes gitignored
+`manifest.json`, `assignments.jsonl`, `train_pairs.json`, and `mappings.json`
+from a local `u.data` path or bytes. Train-only pairs must stay leakage-safe.
+Timing-chart artifacts do not belong here.

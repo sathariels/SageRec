@@ -3,10 +3,10 @@
 ## Responsibility
 
 Own native-extension stubs, binding tests, the reference sampler,
-in-memory MovieLens 100K split/prep (ADR-003), the implicit MF baseline
-(ADR-004), and the shared ranking evaluator. Later: download/on-disk
-orchestration, GraphSAGE training, configuration, benchmark coordination,
-and result serialization.
+MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
+`processed/` writes, the implicit MF baseline (ADR-004), and the shared
+ranking evaluator. Later: GraphSAGE training, configuration, benchmark
+coordination, and remaining result serialization.
 
 ## Current slice
 
@@ -15,12 +15,17 @@ and result serialization.
 - The module exposes `BipartiteCSR` and in-memory `parse_movielens_100k`.
 - `sagerec_reference_sampler.py` is a naive Python neighbor sampler for
   correctness comparison. It consumes CSR `offsets`/`neighbors` views and
-  matches the native `sample_neighbors` contract (Fisher–Yates prefix,
-  `std::mt19937_64`, unbiased `uniform_below`). It does not build graphs,
-  apply splits, or ingest MovieLens files.
+  matches the native ADR-005 `sample_neighbors` contract (Fisher–Yates
+  prefix, `std::mt19937_64`, unbiased `uniform_below`). It does not build
+  graphs, apply splits, or ingest MovieLens files.
 - `sagerec_prep.py` assigns ADR-003 leave-one-out splits in memory and
-  emits train-only pairs plus a manifest dict. It does not download data,
-  read dataset paths, or construct a CSR.
+  emits train-only pairs plus a manifest dict. It does not download data
+  or construct a CSR.
+- `sagerec_download.py` fetches the official GroupLens 100K zip, verifies
+  the published archive MD5, and extracts `u.data`. No 1M.
+- `sagerec_dataset.py` reads `u.data` from a path or bytes, calls
+  `graph_sampler.parse_movielens_100k` and `sagerec_prep`, and writes
+  `data/processed/` artifacts plus a filled manifest.
 - `sagerec_scoring.py` defines the `PairScorer` protocol used by the
   baseline and (later) GraphSAGE. Metric logic must not live in the model.
 - `sagerec_negatives.py` draws training negatives that do not overlap
@@ -30,9 +35,8 @@ and result serialization.
 - `sagerec_metrics.py` is the shared ranking evaluator: per-user then
   macro-averaged Recall@10 and NDCG@10, ADR-003 eligibility, and candidate
   filtering.
-- Do not implement MovieLens download, on-disk prep, GraphSAGE training,
-  node2vec, timing charts, or remaining Phase 4–5 work until those phases
-  are opened.
+- Do not implement GraphSAGE training, node2vec, timing charts, or
+  remaining Phase 4–5 work until those phases are opened.
 - Do not add MovieLens 1M or GCN modules.
 
 ## Boundaries
@@ -67,6 +71,9 @@ and result serialization.
 - ADR-003 leave-one-out leakage tests on tiny synthetic interactions:
   held-out positives absent from the train-pair/CSR edge set, eligibility,
   timestamp order and tie-break, cold-start assignment, and determinism.
+- Phase 2 download/prep fixture tests: checksum mismatch, bad zip layout,
+  path/bytes ingestion, filled manifest, train-only pair writes. Do not
+  require a live download in default CI.
 - Phase 3: negative-sample validity, Recall@10 / NDCG@10 unit cases,
   eligibility/filtering, MF train-edge leakage, and a tiny seeded e2e smoke
   with reproducible metrics in `[0, 1]`.

@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/sathariels/SageRec/actions/workflows/ci.yml/badge.svg)](https://github.com/sathariels/SageRec/actions/workflows/ci.yml)
 
-SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, an implicit matrix-factorization baseline, and a shared Recall@10 / NDCG@10 evaluator.
+SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, and a shared Recall@10 / NDCG@10 evaluator.
 
-GraphSAGE is the accepted GNN direction. **Training is not implemented yet** — there is no PyTorch Geometric model, mini-batch loader, or MovieLens 100K quality table.
+GraphSAGE is the accepted GNN direction. **Training is not implemented yet** — there is no PyTorch Geometric model, mini-batch loader, or GNN-versus-baseline quality table.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -12,16 +12,18 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 
 | Built | Not yet |
 | --- | --- |
-| C++ bipartite CSR + seeded neighbor sampler | MovieLens download / on-disk `data/processed/` writes |
-| MovieLens 100K in-memory `u.data` parser | C++ vs Python timing charts and stored speedups |
-| pybind11 `graph_sampler` bindings | GraphSAGE training / PyG mini-batch path |
-| Python reference sampler + native parity tests | MovieLens 100K leaderboard / published Recall@10·NDCG@10 |
-| ADR-003 in-memory leave-one-out split/prep | |
+| C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | C++ vs Python timing charts and stored speedups |
+| MovieLens 100K in-memory `u.data` parser | GraphSAGE training / PyG mini-batch path |
+| Official 100K download + on-disk `data/processed/` prep | GNN-versus-baseline comparison chart |
+| pybind11 `graph_sampler` bindings | |
+| Python reference sampler + native parity tests | |
+| ADR-003 leave-one-out split/prep (in-memory and on-disk) | |
 | Implicit MF baseline (NumPy logistic SGD) | |
-| Shared Recall@10 / NDCG@10 evaluator (synthetic smoke) | |
+| Shared Recall@10 / NDCG@10 evaluator | |
+| Single-seed MovieLens 100K MF metrics in [`results/mf_movielens_100k.json`](results/mf_movielens_100k.json) | |
 | Release CMake build + GitHub Actions CI | |
 
-The MF ranking smoke is a tiny synthetic unittest. It is **not** a MovieLens 100K result.
+The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). That file is **not** GraphSAGE training and **not** a published 100K leaderboard.
 
 ## Why this project
 
@@ -29,7 +31,7 @@ This is a systems + ML-infra portfolio piece, not a notebook demo.
 
 - **Leakage-safe graph:** the sampling CSR is built from training positives only; held-out edges never enter preprocessing, negatives, or candidate filtering.
 - **Native sampler:** neighbor sampling is real C++ CSR code with an explicit seed, not a wrapper around a graph library.
-- **Harness first:** native tests, binding tests, sampler parity, split leakage tests, and a seeded MF metric smoke run in CI.
+- **Harness first:** native tests, binding tests, sampler parity, split leakage tests, download/prep fixture tests, and a seeded MF metric smoke run in CI.
 
 The intended training path will call `graph_sampler` from Python. That path does not exist yet.
 
@@ -61,16 +63,35 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | CSR + `sample_neighbors` | [`cpp/include/sagerec/bipartite_csr.hpp`](cpp/include/sagerec/bipartite_csr.hpp), [`cpp/src/bipartite_csr.cpp`](cpp/src/bipartite_csr.cpp) |
 | MovieLens 100K parser | [`cpp/include/sagerec/movielens_100k.hpp`](cpp/include/sagerec/movielens_100k.hpp) — in-memory `u.data` text only |
 | Python extension | `graph_sampler` via [`cpp/src/bindings.cpp`](cpp/src/bindings.cpp); stubs in [`python/graph_sampler.pyi`](python/graph_sampler.pyi) |
-| Reference sampler | [`python/sagerec_reference_sampler.py`](python/sagerec_reference_sampler.py) — matches the native contract for parity tests |
+| Reference sampler | [`python/sagerec_reference_sampler.py`](python/sagerec_reference_sampler.py) — matches the native ADR-005 contract for parity tests |
 | Leave-one-out prep | [`python/sagerec_prep.py`](python/sagerec_prep.py) — in-memory ADR-003 split; train-only pairs for `BipartiteCSR` |
+| 100K download | [`python/sagerec_download.py`](python/sagerec_download.py) — official GroupLens zip, published MD5, extract `u.data` |
+| On-disk prep | [`python/sagerec_dataset.py`](python/sagerec_dataset.py) — path/bytes → parser → ADR-003 → `data/processed/` + manifest |
 | Scoring protocol | [`python/sagerec_scoring.py`](python/sagerec_scoring.py) — `PairScorer` for baseline and future GNN |
 | Training negatives | [`python/sagerec_negatives.py`](python/sagerec_negatives.py) — exclude known positives in the caller-supplied scope |
 | MF baseline | [`python/sagerec_baseline.py`](python/sagerec_baseline.py) — seeded NumPy logistic SGD |
 | Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10 |
 
-Parser and prep do not download MovieLens. Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
+Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for future metrics and charts.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF launchers.
+
+## MovieLens 100K download and prep
+
+Official archive (GroupLens):
+
+- URL: `https://files.grouplens.org/datasets/movielens/ml-100k.zip`
+- Published MD5: `0e33842e24a9c977be4e0107933c0723` (from `ml-100k.zip.md5`)
+
+```bash
+PYTHONPATH=build:python python3 scripts/download_movielens_100k.py --raw-dir data/raw
+PYTHONPATH=build:python python3 scripts/prepare_movielens_100k.py \
+  --udata data/raw/ml-100k/u.data --processed-dir data/processed
+```
+
+`data/raw/` and `data/processed/` stay gitignored except schemas and agent guides. Do not commit the zip or `u.data`. MovieLens 1M is refused.
+
+If `files.grouplens.org` presents an expired TLS certificate, the downloader retries without TLS verification **only when** the expected archive MD5 will still be checked.
 
 ## Owner decisions
 
@@ -82,9 +103,9 @@ Recorded in [`docs/decisions.md`](docs/decisions.md):
 | ADR-002 | Accepted | GraphSAGE (not GCN) |
 | ADR-003 | Accepted | Per-user chronological leave-one-out; min 3 interactions; cold-start users stay in train and are excluded from ranking |
 | ADR-004 | Accepted | Implicit-feedback matrix factorization (not node2vec) |
-| ADR-005 | Proposed | Uniform sampling without replacement |
+| ADR-005 | Accepted | Uniform sampling without replacement |
 
-The native sampler already implements the proposed ADR-005 defaults (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). That is an implementation contract, not an accepted experiment decision.
+The native and Python reference samplers implement ADR-005 (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). Changing replacement policy requires a superseding ADR.
 
 ## Build and test
 
@@ -98,12 +119,14 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, MF ranking smoke). After a successful build:
+CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke). After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_mf_baseline.py -v
 ```
+
+Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
 
 `import graph_sampler` loads the compiled extension. Construction takes local `(user_id, movie_id)` pairs. Do not vendor MovieLens data.
 
@@ -111,7 +134,8 @@ PYTHONPATH=build:python python3 -m unittest python/tests/test_mf_baseline.py -v
 
 - No trained GraphSAGE, no production users, no claimed latency speedups.
 - No invented metrics. Tiny synthetic MF smoke ≠ MovieLens 100K evaluation.
-- MovieLens download, on-disk prep, timing charts, and GNN training are still ahead.
+- A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE and not a multi-seed leaderboard.
+- Timing charts and GNN training are still ahead.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.
