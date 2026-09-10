@@ -220,8 +220,10 @@ implementations and every parity/benchmark comparison.
 - Changing replacement policy, allowing duplicate neighbors within a hop,
   or switching the reference/native pair to with-replacement requires a
   superseding ADR.
-- Benchmarks and GraphSAGE training (when Phase 4 opens) must use this
-  contract; do not silently substitute a with-replacement PyG sampler.
+- Benchmarks and GraphSAGE training must use this contract; do not silently
+  substitute a with-replacement PyG sampler. The Phase 4 mini-batch helper
+  (`python/sagerec_minibatch.py`) calls native `sample_neighbors` with this
+  without-replacement policy.
 
 ## Proposals
 

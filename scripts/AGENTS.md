@@ -17,4 +17,6 @@ Opened Phase 2/3 scripts (MovieLens 100K only):
 - `run_mf_movielens_100k.py` — seeded implicit MF on prepared artifacts.
 
 Do not add GraphSAGE training, MovieLens 1M, or timing-benchmark scripts until
-those phases are opened.
+those slices are opened. The Phase 4 mini-batch helper lives in
+`python/sagerec_minibatch.py` and is covered by tests; no launcher is required
+for this harness.

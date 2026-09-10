@@ -4,8 +4,9 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), and ADR-005
 (uniform sampling without replacement) are accepted. MovieLens 1M remains
 deferred. Phase 2 download and on-disk `processed/` prep are open for
-MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 GraphSAGE
-training is not open.
+MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 is open for the
+native-backed mini-batch neighborhood harness. Full GraphSAGE training
+remains incomplete.
 
 ## Phase 1: Native foundation
 
@@ -98,7 +99,8 @@ Opened in the ADR-004 matrix-factorization slice:
 
 Still not started:
 
-- GraphSAGE training (Phase 4).
+- Full GraphSAGE training, PyG model weights, and a GNN-versus-baseline
+  quality table (Phase 4 remaining work).
 - node2vec (rejected unless a superseding ADR accepts it).
 - Do not invent MovieLens 100K quality numbers. A real single-seed 100K MF
   run is stored under `results/mf_movielens_100k.json` when generated from
@@ -109,10 +111,24 @@ the tiny synthetic path (verification only, not a MovieLens 100K result).
 
 ## Phase 4: GNN
 
-- Implement accepted GNN and native-backed mini-batch loader.
-- Verify native sampler usage during training.
-- Add unit and tiny end-to-end tests.
-- Tune only on validation data.
+Opened in the mini-batch harness slice:
+
+- Native-backed neighborhood helper (`python/sagerec_minibatch.py`) that
+  builds a train-only `BipartiteCSR` from local pairs and expands seeded
+  multi-hop neighborhoods by calling `graph_sampler.sample_neighbors`
+  (ADR-005 without replacement).
+- Deterministic tests (`python/tests/test_minibatch_native.py`) on a tiny
+  synthetic graph: compiled-extension requirement, native-call spying
+  (reference sampler must not be used), seed reproducibility, empty /
+  `k = 0` / full-neighborhood cases, and train-only CSR leakage.
+
+Still not started:
+
+- GraphSAGE layers, PyTorch Geometric tensors, model weights, and training
+  loops.
+- GNN ranking metrics or a GNN-versus-baseline quality table.
+- Do not add PyG/PyTorch as a default-CI dependency until a later slice
+  actually trains a model.
 
 Exit condition: reproducible GNN run and test metrics exist.
 

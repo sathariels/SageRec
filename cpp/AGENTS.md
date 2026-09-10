@@ -51,9 +51,11 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
   smoke tests (`local_pairs()` CSR handoff and `GraphError` on bad input).
 - CTest `python_binding_smoke` discovers `python/tests`, including
   native-vs-reference sampler parity, ADR-003 prep tests, Phase 2
-  download/prep fixture tests, and the Phase 3 MF ranking smoke.
+  download/prep fixture tests, the Phase 3 MF ranking smoke, and the
+  Phase 4 mini-batch native-sampler tests.
   PYTHONPATH includes the build directory and `python/` so `sagerec_*`
   modules import cleanly.
 
-Do not add GNN training, native downloads, or a second sampler module name.
-MovieLens download stays in Python (`sagerec_download`).
+Do not add GraphSAGE training, native downloads, or a second sampler module
+name. MovieLens download stays in Python (`sagerec_download`). Phase 4
+Python mini-batch expansion must keep calling this `graph_sampler`.
