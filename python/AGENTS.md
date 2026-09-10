@@ -4,9 +4,10 @@
 
 Own native-extension stubs, binding tests, the reference sampler,
 MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
-`processed/` writes, the implicit MF baseline (ADR-004), and the shared
-ranking evaluator. Later: GraphSAGE training, configuration, benchmark
-coordination, and remaining result serialization.
+`processed/` writes, the implicit MF baseline (ADR-004), the shared
+ranking evaluator, and the native-backed mini-batch neighborhood helper.
+Later: GraphSAGE training, configuration, benchmark coordination, and
+remaining result serialization.
 
 ## Current slice
 
@@ -35,8 +36,12 @@ coordination, and remaining result serialization.
 - `sagerec_metrics.py` is the shared ranking evaluator: per-user then
   macro-averaged Recall@10 and NDCG@10, ADR-003 eligibility, and candidate
   filtering.
+- `sagerec_minibatch.py` is the Phase 4 harness: train-only
+  `BipartiteCSR` from local pairs and seeded multi-hop expansion via
+  native `graph_sampler.sample_neighbors` (ADR-005). No PyTorch/PyG, no
+  GraphSAGE layers, no quality metrics.
 - Do not implement GraphSAGE training, node2vec, timing charts, or
-  remaining Phase 4–5 work until those phases are opened.
+  remaining Phase 5 work until those slices are opened.
 - Do not add MovieLens 1M or GCN modules.
 
 ## Boundaries
@@ -49,8 +54,9 @@ coordination, and remaining result serialization.
   and CLI entry points.
 - Depend on a narrow sampler protocol so unit tests can inject a deterministic fake.
 - Baseline and GNN evaluation must call `sagerec_metrics.evaluate_ranking`.
-- NumPy is required for the MF baseline. Do not add heavier ML dependencies
-  for Phase 3.
+- NumPy is required for the MF baseline. Do not add PyTorch/PyG for the
+  Phase 4 mini-batch harness; those belong to a later GraphSAGE training
+  slice.
 
 ## Correctness
 
@@ -77,3 +83,8 @@ coordination, and remaining result serialization.
 - Phase 3: negative-sample validity, Recall@10 / NDCG@10 unit cases,
   eligibility/filtering, MF train-edge leakage, and a tiny seeded e2e smoke
   with reproducible metrics in `[0, 1]`.
+- Phase 4 mini-batch: compiled `graph_sampler` required (actionable
+  ImportError if missing or not a `.so`); native `sample_neighbors` is
+  actually called; reference sampler is not used; seed reproducibility;
+  empty / `k = 0` / full-neighborhood; train-only CSR excludes held-out
+  positives.

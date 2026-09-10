@@ -149,9 +149,10 @@ The intended Python-facing abstraction is conceptually:
 
 `sample_neighbors(node_id, k, seed) -> sequence[node_id]`
 
-Batch and multi-hop variants may be added after the minimal API is correct. The
-accepted contract must state replacement behavior, output ordering, deterministic
-seed semantics, invalid-node behavior, and concurrency guarantees.
+`python/sagerec_minibatch.py` adds the batch/multi-hop variant used by the
+Phase 4 training-data path. The accepted contract must state replacement
+behavior, output ordering, deterministic seed semantics, invalid-node
+behavior, and concurrency guarantees.
 
 ADR-005 accepts uniform sampling without replacement, the full neighborhood when
 `k >= degree`, and empty results for isolated nodes or `k = 0`. Phase 1
@@ -159,7 +160,12 @@ implemented that contract; changing replacement requires a superseding ADR. The
 naive Python reference in `python/sagerec_reference_sampler.py` consumes CSR
 `offsets`/`neighbors` views and implements the same contract, including the
 native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
-`uniform_below` draw. Current behavior:
+`uniform_below` draw.
+
+The Phase 4 harness (`python/sagerec_minibatch.py`) builds a train-only
+`BipartiteCSR` from local pairs and expands seeded multi-hop neighborhoods by
+calling native `sample_neighbors`. It does not implement GraphSAGE layers or
+PyG tensors. Current one-hop behavior:
 
 | Topic | Implementation contract |
 | --- | --- |
@@ -171,17 +177,43 @@ native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
 | Invalid `node_id` or `k < 0` or `seed < 0` | Fail with an actionable `GraphError` |
 | Concurrency | Sampling is `const` and uses a per-call engine; no shared RNG |
 
+## Mini-batch neighborhood helper (Phase 4 harness)
+
+`python/sagerec_minibatch.py` is the Python training-data path into the native
+sampler. Public surface:
+
+- `load_graph_sampler()` imports the compiled `graph_sampler` extension or
+  fails with an actionable error (missing module, non-`.so` stub).
+- `train_csr_from_pairs(num_users, num_movies, train_pairs)` constructs a
+  train-only `BipartiteCSR`. Callers must pass training positives only.
+- `NativeMinibatchSampler.from_train_pairs(...)` / `from_graph(csr)` wrap
+  that graph. Non-native objects are rejected.
+- `sample_neighbors(node_id, k, seed)` delegates to
+  `graph_sampler.BipartiteCSR.sample_neighbors` with the seed unchanged.
+- `sample_multihop(seed_nodes, fanouts, seed)` expands GraphSAGE-style
+  frontiers. Hop 0 sources are `seed_nodes`; hop `h+1` sources are the
+  concatenation of hop `h` neighbor lists. Each native call uses
+  `derived_sample_seed(seed, hop, source_index)` (hash-seed independent).
+
+The helper must not fall back to `sagerec_reference_sampler` or a PyG
+neighbor sampler. It does not convert samples into PyG tensors.
+
 ## Training flow
 
 1. Load a versioned dataset manifest and train-only CSR graph.
 2. Select positive user-movie training edges for a mini-batch.
 3. Generate valid negative pairs while excluding known positives.
-4. Expand required neighborhoods through the native sampler.
-5. Convert sampled subgraph data into PyTorch Geometric tensors.
-6. Compute positive and negative recommendation scores and optimize ranking loss.
-7. Evaluate checkpoints with the fixed ranking protocol.
+4. Expand required neighborhoods through the native sampler
+   (`sagerec_minibatch.NativeMinibatchSampler`).
+5. Convert sampled subgraph data into PyTorch Geometric tensors
+   (not implemented).
+6. Compute positive and negative recommendation scores and optimize ranking loss
+   (not implemented).
+7. Evaluate checkpoints with the fixed ranking protocol (GraphSAGE path
+   not implemented).
 
-The GNN family is GraphSAGE (ADR-002). Layer implementation remains Phase 4.
+The GNN family is GraphSAGE (ADR-002). Layer implementation remains later
+Phase 4 work.
 
 ## Baseline (ADR-004)
 
