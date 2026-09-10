@@ -57,6 +57,11 @@ class LoadGraphSamplerTests(unittest.TestCase):
         self.assertTrue(path.name.endswith(".so") or ".so." in path.name)
         self.assertTrue(callable(module.BipartiteCSR.sample_neighbors))
 
+    def test_helper_does_not_import_reference_sampler(self) -> None:
+        source = Path(minibatch.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("sagerec_reference_sampler", source)
+        self.assertIn("call_native_sample_neighbors", source)
+
     def test_missing_graph_sampler_fails_actionably(self) -> None:
         real = sys.modules.get("graph_sampler")
         sys.modules["graph_sampler"] = None
@@ -120,21 +125,22 @@ class NativeMinibatchSamplerTests(unittest.TestCase):
         self.assertEqual(wrapped.neighbors(), self.graph.neighbors())
 
     def test_sample_neighbors_calls_native_not_reference(self) -> None:
-        original = self.graph.sample_neighbors
-        calls: list[tuple[int, int, int]] = []
-
-        def spy(node_id: int, k: int, seed: int) -> list[int]:
-            calls.append((node_id, k, seed))
-            return original(node_id, k, seed)
-
-        self.graph.sample_neighbors = spy
         with mock.patch.object(
-            reference, "sample_neighbors", wraps=reference.sample_neighbors
-        ) as ref:
-            sampled = self.sampler.sample_neighbors(0, 3, 42)
+            minibatch,
+            "call_native_sample_neighbors",
+            wraps=minibatch.call_native_sample_neighbors,
+        ) as native:
+            with mock.patch.object(
+                reference, "sample_neighbors", wraps=reference.sample_neighbors
+            ) as ref:
+                sampled = self.sampler.sample_neighbors(0, 3, 42)
         ref.assert_not_called()
-        self.assertEqual(calls, [(0, 3, 42)])
-        self.assertEqual(sampled, original(0, 3, 42))
+        native.assert_called_once()
+        args, kwargs = native.call_args
+        self.assertIs(args[0], self.graph)
+        self.assertEqual(args[1:], (0, 3, 42))
+        self.assertEqual(kwargs, {})
+        self.assertEqual(sampled, self.graph.sample_neighbors(0, 3, 42))
         self.assertEqual(len(sampled), 3)
         self.assertEqual(len(set(sampled)), 3)
 
@@ -166,19 +172,17 @@ class NativeMinibatchSamplerTests(unittest.TestCase):
         self.assertEqual(self.sampler.sample_neighbors(0, 3, 42), first)
 
     def test_multihop_calls_native_with_derived_seeds(self) -> None:
-        original = self.graph.sample_neighbors
-        calls: list[tuple[int, int, int]] = []
-
-        def spy(node_id: int, k: int, seed: int) -> list[int]:
-            calls.append((node_id, k, seed))
-            return original(node_id, k, seed)
-
-        self.graph.sample_neighbors = spy
         with mock.patch.object(
-            reference, "sample_neighbors", wraps=reference.sample_neighbors
-        ) as ref:
-            batch = self.sampler.sample_multihop([0, 1], [2, 2], seed=7)
+            minibatch,
+            "call_native_sample_neighbors",
+            wraps=minibatch.call_native_sample_neighbors,
+        ) as native:
+            with mock.patch.object(
+                reference, "sample_neighbors", wraps=reference.sample_neighbors
+            ) as ref:
+                batch = self.sampler.sample_multihop([0, 1], [2, 2], seed=7)
         ref.assert_not_called()
+        self.assertGreaterEqual(native.call_count, 2)
 
         self.assertEqual(batch.seed_nodes, (0, 1))
         self.assertEqual(batch.fanouts, (2, 2))
@@ -187,13 +191,15 @@ class NativeMinibatchSamplerTests(unittest.TestCase):
         self.assertEqual(len(batch.hops), 2)
         self.assertEqual(len(batch.hops[0]), 2)
 
+        first_calls = [call.args[1:] for call in native.call_args_list[:2]]
         expected_first = [
             (0, 2, minibatch.derived_sample_seed(7, 0, 0)),
             (1, 2, minibatch.derived_sample_seed(7, 0, 1)),
         ]
-        self.assertEqual(calls[:2], expected_first)
-        self.assertGreaterEqual(len(calls), 2)
-        for node_id, k, _seed in calls:
+        self.assertEqual(first_calls, expected_first)
+        for call in native.call_args_list:
+            self.assertIs(call.args[0], self.graph)
+            node_id, k, _seed = call.args[1:]
             self.assertEqual(k, 2)
             self.assertGreaterEqual(node_id, 0)
             self.assertLess(node_id, self.sampler.num_nodes)

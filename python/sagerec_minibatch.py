@@ -104,6 +104,24 @@ def train_csr_from_pairs(
     return module.BipartiteCSR(num_users, num_movies, pairs)
 
 
+def call_native_sample_neighbors(
+    graph: object, node_id: int, k: int, seed: int
+) -> list[int]:
+    """Call compiled ``BipartiteCSR.sample_neighbors``; never a Python fallback.
+
+    This is the single sampling call site so tests can prove the native
+    method ran (pybind11 methods are not instance-patchable).
+    """
+    module = load_graph_sampler()
+    if not isinstance(graph, module.BipartiteCSR):
+        raise TypeError(
+            "Expected graph_sampler.BipartiteCSR, got "
+            f"{type(graph).__name__}. Mini-batch sampling must call native "
+            "sample_neighbors; do not substitute a Python sampler."
+        )
+    return list(graph.sample_neighbors(node_id, k, seed))
+
+
 def derived_sample_seed(base_seed: int, hop: int, source_index: int) -> int:
     """Non-negative seed for one native ``sample_neighbors`` call.
 
@@ -199,7 +217,7 @@ class NativeMinibatchSampler:
         node_id = _require_int("node_id", node_id)
         k = _require_int("k", k)
         seed = _require_int("seed", seed)
-        return list(self._graph.sample_neighbors(node_id, k, seed))
+        return call_native_sample_neighbors(self._graph, node_id, k, seed)
 
     def sample_multihop(
         self,
@@ -231,7 +249,7 @@ class NativeMinibatchSampler:
             for index, node_id in enumerate(frontier):
                 call_seed = derived_sample_seed(seed, hop, index)
                 sampled = tuple(
-                    self._graph.sample_neighbors(node_id, k, call_seed)
+                    call_native_sample_neighbors(self._graph, node_id, k, call_seed)
                 )
                 sampled_lists.append(sampled)
                 next_frontier.extend(sampled)

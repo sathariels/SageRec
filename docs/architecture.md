@@ -189,7 +189,8 @@ sampler. Public surface:
 - `NativeMinibatchSampler.from_train_pairs(...)` / `from_graph(csr)` wrap
   that graph. Non-native objects are rejected.
 - `sample_neighbors(node_id, k, seed)` delegates to
-  `graph_sampler.BipartiteCSR.sample_neighbors` with the seed unchanged.
+  `call_native_sample_neighbors`, the single call site for
+  `graph_sampler.BipartiteCSR.sample_neighbors` (seed unchanged).
 - `sample_multihop(seed_nodes, fanouts, seed)` expands GraphSAGE-style
   frontiers. Hop 0 sources are `seed_nodes`; hop `h+1` sources are the
   concatenation of hop `h` neighbor lists. Each native call uses
