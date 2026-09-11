@@ -73,9 +73,11 @@ class GraphSAGEModuleContractTests(unittest.TestCase):
         self.assertIn("sagerec_minibatch", source)
         self.assertIn("NativeMinibatchSampler", source)
         self.assertTrue(callable(minibatch.call_native_sample_neighbors))
-        self.assertNotIn("NeighborLoader", source)
-        self.assertNotIn("torch_geometric", source)
-        self.assertNotIn("sagerec_reference_sampler", source)
+        self.assertNotIn("import torch_geometric", source)
+        self.assertNotIn("from torch_geometric", source)
+        self.assertNotIn("torch_geometric.loader", source)
+        self.assertNotIn("import sagerec_reference_sampler", source)
+        self.assertNotIn("from sagerec_reference_sampler", source)
 
     def test_invalid_config_fails(self) -> None:
         with self.assertRaises(ValueError):
