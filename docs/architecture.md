@@ -164,8 +164,9 @@ native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
 
 The Phase 4 harness (`python/sagerec_minibatch.py`) builds a train-only
 `BipartiteCSR` from local pairs and expands seeded multi-hop neighborhoods by
-calling native `sample_neighbors`. It does not implement GraphSAGE layers or
-PyG tensors. Current one-hop behavior:
+calling native `sample_neighbors`. GraphSAGE training (`python/sagerec_graphsage.py`)
+consumes those batches; the helper itself does not own layers or metrics.
+Current one-hop behavior:
 
 | Topic | Implementation contract |
 | --- | --- |
@@ -197,7 +198,9 @@ sampler. Public surface:
   `derived_sample_seed(seed, hop, source_index)` (hash-seed independent).
 
 The helper must not fall back to `sagerec_reference_sampler` or a PyG
-neighbor sampler. It does not convert samples into PyG tensors.
+neighbor sampler. GraphSAGE training converts native `NeighborhoodBatch`
+data into PyTorch tensors for in-repo mean aggregation. It does not use a
+PyG NeighborLoader.
 
 ## Training flow
 
@@ -206,15 +209,18 @@ neighbor sampler. It does not convert samples into PyG tensors.
 3. Generate valid negative pairs while excluding known positives.
 4. Expand required neighborhoods through the native sampler
    (`sagerec_minibatch.NativeMinibatchSampler`).
-5. Convert sampled subgraph data into PyTorch Geometric tensors
-   (not implemented).
-6. Compute positive and negative recommendation scores and optimize ranking loss
-   (not implemented).
-7. Evaluate checkpoints with the fixed ranking protocol (GraphSAGE path
-   not implemented).
+5. Convert sampled neighborhoods into PyTorch tensors (not PyG
+   `NeighborLoader` / `SAGEConv` in this slice).
+6. Compute positive and negative recommendation scores with GraphSAGE
+   mean aggregation and optimize logistic ranking loss
+   (`python/sagerec_graphsage.py`).
+7. Evaluate checkpoints with the fixed ranking protocol via
+   `PairScorer` + `sagerec_metrics.evaluate_ranking`. Tiny synthetic
+   metrics are protocol smoke, not a MovieLens 100K result.
 
-The GNN family is GraphSAGE (ADR-002). Layer implementation remains later
-Phase 4 work.
+The GNN family is GraphSAGE (ADR-002). PyTorch Geometric remains the
+intended production training stack; this slice trains with CPU PyTorch
+on native samples.
 
 ## Baseline (ADR-004)
 
@@ -232,8 +238,8 @@ do not add node2vec or extra ML libraries for this slice.
 
 Models implement `sagerec_scoring.PairScorer.score_pairs(user_ids, item_ids)`
 and return one higher-is-better score per aligned pair. The baseline
-(`ImplicitMF`) satisfies that protocol. GraphSAGE must use the same
-protocol later so the evaluator stays model-agnostic.
+(`ImplicitMF`) and GraphSAGE (`GraphSAGERecommender`) satisfy that
+protocol so the evaluator stays model-agnostic.
 
 ## Evaluation boundary
 

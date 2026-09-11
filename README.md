@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/sathariels/SageRec/actions/workflows/ci.yml/badge.svg)](https://github.com/sathariels/SageRec/actions/workflows/ci.yml)
 
-SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, and a native-backed mini-batch neighborhood helper.
+SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, and GraphSAGE training on that harness.
 
-GraphSAGE is the accepted GNN direction. Phase 4 is **open for the mini-batch harness** (Python calls `graph_sampler`). **Full GraphSAGE training is not implemented** — there is no PyTorch Geometric model, no GNN weights, and no GNN-versus-baseline quality table.
+GraphSAGE is the accepted GNN direction. Phase 4 is **open for GraphSAGE training** on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). There is **no MovieLens 100K GNN quality table** yet — that is Phase 5. Tiny synthetic GraphSAGE metrics are protocol smoke, not a 100K result.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -13,9 +13,10 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | Built | Not yet |
 | --- | --- |
 | C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | C++ vs Python timing charts and stored speedups |
-| MovieLens 100K in-memory `u.data` parser | Full GraphSAGE training / PyG model weights |
-| Official 100K download + on-disk `data/processed/` prep | GNN-versus-baseline comparison chart |
-| Native-backed mini-batch neighborhood helper | |
+| MovieLens 100K in-memory `u.data` parser | MovieLens 100K GraphSAGE metrics / leaderboard |
+| Official 100K download + on-disk `data/processed/` prep | GNN-versus-baseline comparison chart (Phase 5) |
+| Native-backed mini-batch neighborhood helper | PyG NeighborLoader / SAGEConv (intended later) |
+| GraphSAGE training on native samples (CPU PyTorch) | |
 | pybind11 `graph_sampler` bindings | |
 | Python reference sampler + native parity tests | |
 | ADR-003 leave-one-out split/prep (in-memory and on-disk) | |
@@ -32,13 +33,13 @@ This is a systems + ML-infra portfolio piece, not a notebook demo.
 
 - **Leakage-safe graph:** the sampling CSR is built from training positives only; held-out edges never enter preprocessing, negatives, or candidate filtering.
 - **Native sampler:** neighbor sampling is real C++ CSR code with an explicit seed, not a wrapper around a graph library.
-- **Harness first:** native tests, binding tests, sampler parity, split leakage tests, download/prep fixture tests, a seeded MF metric smoke run, and mini-batch native-sampler tests in CI.
+- **Harness first:** native tests, binding tests, sampler parity, split leakage tests, download/prep fixture tests, a seeded MF metric smoke run, mini-batch native-sampler tests, and a GraphSAGE training smoke that spies on `graph_sampler` in CI.
 
-The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) calls `graph_sampler` for seeded multi-hop neighborhood expansion. GraphSAGE layers and training do not exist yet.
+The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) calls `graph_sampler` for seeded multi-hop neighborhood expansion. GraphSAGE training in [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) uses those native samples with PyTorch mean aggregation. It does not use a PyG neighbor sampler.
 
 ## Architecture
 
-Intended system. Solid arrows are implemented. Dashed arrows lead to work that is **not implemented**.
+Intended system. Solid arrows are implemented. Dashed arrows lead to work that is **not implemented** (timing charts). GraphSAGE evaluation on tiny synthetic data is implemented; the Phase 5 100K comparison is not.
 
 ```mermaid
 flowchart LR
@@ -47,9 +48,9 @@ flowchart LR
     C --> D[C++ neighbor sampler]
     D --> E[pybind11 graph_sampler]
     E --> F[Python mini-batch neighborhood helper]
-    F -.-> G[GraphSAGE]
+    F --> G[GraphSAGE]
     B --> H[MF baseline]
-    G -.-> I[Recall@10 and NDCG@10]
+    G --> I[Recall@10 and NDCG@10]
     H --> I
     D -.-> J[C++ vs Python timing charts]
     D --> R[Python reference sampler]
@@ -73,10 +74,11 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | MF baseline | [`python/sagerec_baseline.py`](python/sagerec_baseline.py) — seeded NumPy logistic SGD |
 | Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10 |
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
+| GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — CPU PyTorch mean layers + `PairScorer` on native samples |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE-smoke launchers.
 
 ## MovieLens 100K download and prep
 
@@ -111,7 +113,13 @@ The native and Python reference samplers implement ADR-005 (full neighborhood wh
 
 ## Build and test
 
-Debian/Ubuntu: `cmake`, a C++17 compiler (`g++`), `python3-dev`, `pybind11-dev`, `python3-pybind11`, and `python3-numpy`.
+Debian/Ubuntu: `cmake`, a C++17 compiler (`g++`), `python3-dev`, `pybind11-dev`, `python3-pybind11`, and `python3-numpy`. GraphSAGE tests also need CPU PyTorch (`python/requirements-train.txt`):
+
+```bash
+python3 -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+```
+
+Native C++ does not depend on PyTorch. PyTorch Geometric is the intended later production stack; this slice trains with in-repo mean layers on native samples.
 
 ```bash
 cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
@@ -121,12 +129,14 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling). After a successful build:
+CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke). After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_mf_baseline.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_minibatch_native.py -v
+PYTHONPATH=build:python python3 -m unittest python/tests/test_graphsage_train.py -v
+PYTHONPATH=build:python python3 scripts/run_graphsage_synthetic_smoke.py
 ```
 
 Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
@@ -135,11 +145,11 @@ Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only 
 
 ## Honesty
 
-- No trained GraphSAGE, no production users, no claimed latency speedups.
-- No invented metrics. Tiny synthetic MF smoke ≠ MovieLens 100K evaluation.
+- No production users, no claimed latency speedups, no invented 100K GNN metrics.
+- Tiny synthetic MF and GraphSAGE smokes are protocol verification, not MovieLens 100K evaluation.
 - A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE and not a multi-seed leaderboard.
-- The mini-batch harness calls `graph_sampler`; it does not produce GraphSAGE quality numbers.
-- Timing charts and full GNN training are still ahead.
+- GraphSAGE training calls `graph_sampler` via `sagerec_minibatch`. It does not produce MovieLens 100K quality numbers.
+- Timing charts and the Phase 5 GNN-versus-baseline comparison are still ahead.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.

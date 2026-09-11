@@ -17,15 +17,18 @@ CSR graph, seeded neighbor sampler, MovieLens 100K `u.data` parser,
 `graph_sampler` bindings, a naive Python reference sampler with native
 parity tests, ADR-003 leave-one-out prep, MovieLens 100K download and
 on-disk `processed/` writes, an implicit MF baseline, a shared ranking
-evaluator, a native-backed mini-batch neighborhood helper, and CI.
+evaluator, a native-backed mini-batch neighborhood helper, GraphSAGE
+training on that harness, and CI.
 
 Phase 2 download + on-disk `processed/` prep is open for MovieLens 100K.
 Phase 2 timing charts remain closed. Phase 3 is open for the
 matrix-factorization baseline and the shared Recall@10 / NDCG@10 evaluator.
-Phase 4 is open for the native-backed mini-batch neighborhood harness
-(the Python training data path must call `graph_sampler`). Do not implement
-full GraphSAGE training, PyG model weights, or a GNN-versus-baseline quality
-table yet. Do not add MovieLens 1M or GCN paths.
+Phase 4 is open for GraphSAGE training on the native mini-batch harness
+(the Python training data path must call `graph_sampler` /
+`sagerec_minibatch`; do not silently use a PyG NeighborLoader). Tiny
+synthetic protocol-smoke metrics only; do not invent MovieLens 100K GNN
+numbers or a GNN-versus-baseline quality table (Phase 5). Do not add
+MovieLens 1M or GCN paths.
 
 ## Read order
 

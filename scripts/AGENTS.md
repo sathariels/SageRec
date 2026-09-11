@@ -16,7 +16,13 @@ Opened Phase 2/3 scripts (MovieLens 100K only):
 - `prepare_movielens_100k.py` — ADR-003 on-disk prep from a local `u.data` path.
 - `run_mf_movielens_100k.py` — seeded implicit MF on prepared artifacts.
 
-Do not add GraphSAGE training, MovieLens 1M, or timing-benchmark scripts until
-those slices are opened. The Phase 4 mini-batch helper lives in
-`python/sagerec_minibatch.py` and is covered by tests; no launcher is required
-for this harness.
+Opened Phase 4 GraphSAGE synthetic smoke:
+
+- `run_graphsage_synthetic_smoke.py` — tiny ADR-003 GraphSAGE protocol
+  smoke using native `sagerec_minibatch`. Prints labeled protocol-smoke
+  metrics; do not write MovieLens 100K GNN result files.
+
+Do not add MovieLens 1M, timing-benchmark, or Phase 5 comparison scripts
+until those slices are opened. The Phase 4 mini-batch helper lives in
+`python/sagerec_minibatch.py`. GraphSAGE training lives in
+`python/sagerec_graphsage.py`.

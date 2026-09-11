@@ -4,9 +4,10 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), and ADR-005
 (uniform sampling without replacement) are accepted. MovieLens 1M remains
 deferred. Phase 2 download and on-disk `processed/` prep are open for
-MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 is open for the
-native-backed mini-batch neighborhood harness. Full GraphSAGE training
-remains incomplete.
+MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 is open for
+GraphSAGE training on the native-backed mini-batch harness. Full project
+acceptance still needs the Phase 5 GNN-versus-baseline comparison; do not
+claim MovieLens 100K GraphSAGE leaderboard numbers.
 
 ## Phase 1: Native foundation
 
@@ -99,8 +100,7 @@ Opened in the ADR-004 matrix-factorization slice:
 
 Still not started:
 
-- Full GraphSAGE training, PyG model weights, and a GNN-versus-baseline
-  quality table (Phase 4 remaining work).
+- A GNN-versus-baseline quality table (Phase 5).
 - node2vec (rejected unless a superseding ADR accepts it).
 - Do not invent MovieLens 100K quality numbers. A real single-seed 100K MF
   run is stored under `results/mf_movielens_100k.json` when generated from
@@ -122,15 +122,32 @@ Opened in the mini-batch harness slice:
   (reference sampler must not be used), seed reproducibility, empty /
   `k = 0` / full-neighborhood cases, and train-only CSR leakage.
 
+Opened in the GraphSAGE training slice:
+
+- PyTorch GraphSAGE mean layers and trainer (`python/sagerec_graphsage.py`)
+  that implement `PairScorer` and call `NativeMinibatchSampler` for every
+  neighborhood expansion. CPU-only `torch==2.6.0` is pinned in
+  `python/requirements-train.txt`.
+- Primary experiments must not use a PyG NeighborLoader or other Python
+  sampler. PyG remains the intended production stack for later SAGEConv /
+  tensor conversion; this slice is an in-repo PyTorch trainer on native
+  samples, not a NumPy fallback.
+- Tiny synthetic ADR-003 smoke (`python/tests/test_graphsage_train.py`):
+  native `sample_neighbors` spy, train-only CSR leakage, negatives exclude
+  known positives, and seeded Recall@10 / NDCG@10 that stay finite in
+  `[0, 1]` and match across two runs. Those metrics are protocol smoke,
+  not a MovieLens 100K result.
+
 Still not started:
 
-- GraphSAGE layers, PyTorch Geometric tensors, model weights, and training
-  loops.
-- GNN ranking metrics or a GNN-versus-baseline quality table.
-- Do not add PyG/PyTorch as a default-CI dependency until a later slice
-  actually trains a model.
+- MovieLens 100K GraphSAGE quality numbers or a GNN-versus-baseline
+  comparison table/chart (Phase 5).
+- PyG `SAGEConv` / NeighborLoader integration. Do not silently substitute
+  a PyG sampler.
 
-Exit condition: reproducible GNN run and test metrics exist.
+Exit condition: reproducible tiny GraphSAGE training smoke exists and
+proves native sampling is on the training path. Phase 5 still owns the
+100K GNN-versus-baseline report.
 
 ## Phase 5: Comparison and documentation
 

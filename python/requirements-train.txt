@@ -1,0 +1,14 @@
+# CPU-only extras for Phase 4 GraphSAGE training (Python side).
+# Native C++ / graph_sampler does not depend on these packages.
+#
+# Install (preferred CPU wheel index):
+#   python3 -m pip install -r python/requirements-train.txt \
+#     --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# Or:
+#   python3 -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+#
+# PyTorch Geometric remains the intended production training stack. This slice
+# uses PyTorch + native graph_sampler mean aggregation and does not install PyG
+# (no NeighborLoader / SAGEConv). Do not add CUDA wheels to default CI.
+torch==2.6.0

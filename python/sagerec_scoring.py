@@ -1,4 +1,4 @@
-"""Shared ranking-score protocol for the baseline and future GNN.
+"""Shared ranking-score protocol for the baseline and GraphSAGE.
 
 Metric logic belongs in ``sagerec_metrics``, not in a model. Any scorer that
 implements ``score_pairs`` can be evaluated with the same candidate protocol.
