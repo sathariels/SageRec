@@ -5,9 +5,9 @@
 Own native-extension stubs, binding tests, the reference sampler,
 MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
 `processed/` writes, the implicit MF baseline (ADR-004), the shared
-ranking evaluator, and the native-backed mini-batch neighborhood helper.
-Later: GraphSAGE training, configuration, benchmark coordination, and
-remaining result serialization.
+ranking evaluator, the native-backed mini-batch neighborhood helper, and
+GraphSAGE training on that harness. Later: benchmark coordination,
+Phase 5 GNN-versus-baseline comparison, and remaining result serialization.
 
 ## Current slice
 
@@ -28,7 +28,7 @@ remaining result serialization.
   `graph_sampler.parse_movielens_100k` and `sagerec_prep`, and writes
   `data/processed/` artifacts plus a filled manifest.
 - `sagerec_scoring.py` defines the `PairScorer` protocol used by the
-  baseline and (later) GraphSAGE. Metric logic must not live in the model.
+  baseline and GraphSAGE. Metric logic must not live in the model.
 - `sagerec_negatives.py` draws training negatives that do not overlap
   known positives in the supplied scope.
 - `sagerec_baseline.py` is seeded implicit-feedback matrix factorization
@@ -38,10 +38,18 @@ remaining result serialization.
   filtering.
 - `sagerec_minibatch.py` is the Phase 4 harness: train-only
   `BipartiteCSR` from local pairs and seeded multi-hop expansion via
-  native `graph_sampler.sample_neighbors` (ADR-005). No PyTorch/PyG, no
-  GraphSAGE layers, no quality metrics.
-- Do not implement GraphSAGE training, node2vec, timing charts, or
-  remaining Phase 5 work until those slices are opened.
+  native `graph_sampler.sample_neighbors` (ADR-005). GraphSAGE training
+  must call this helper; do not fall back to a PyG NeighborLoader.
+- `sagerec_graphsage.py` is the opened GraphSAGE training slice: PyTorch
+  mean-aggregation layers, `PairScorer` scoring, and a seeded trainer
+  that expands neighborhoods through `sagerec_minibatch`. CPU-only
+  PyTorch is pinned in `requirements-train.txt`. PyG remains the intended
+  production stack; this slice does not install or call PyG (no
+  NeighborLoader / SAGEConv). Tiny synthetic metrics are protocol smoke,
+  not a MovieLens 100K result.
+- Do not implement node2vec, timing charts, invented 100K GNN numbers, or
+  a Phase 5 GNN-versus-baseline quality table until those slices are
+  opened.
 - Do not add MovieLens 1M or GCN modules.
 
 ## Boundaries
@@ -54,13 +62,14 @@ remaining result serialization.
   and CLI entry points.
 - Depend on a narrow sampler protocol so unit tests can inject a deterministic fake.
 - Baseline and GNN evaluation must call `sagerec_metrics.evaluate_ranking`.
-- NumPy is required for the MF baseline. Do not add PyTorch/PyG for the
-  Phase 4 mini-batch harness; those belong to a later GraphSAGE training
-  slice.
+- NumPy is required for the MF baseline. GraphSAGE training requires
+  CPU PyTorch (`python/requirements-train.txt`). Do not add PyTorch to
+  the C++ graph core. Do not use a PyG neighbor sampler for primary
+  experiments.
 
 ## Correctness
 
-- Apply the split before constructing the training graph or fitting MF.
+- Apply the split before constructing the training graph or fitting MF / GraphSAGE.
 - Exclude known positive pairs from negatives and ranked candidates as specified.
 - Keep GNN and baseline evaluation paths identical.
 - Seed Python, NumPy, PyTorch, data-loader workers, and native sampling explicitly.
@@ -88,3 +97,9 @@ remaining result serialization.
   actually called; reference sampler is not used; seed reproducibility;
   empty / `k = 0` / full-neighborhood; train-only CSR excludes held-out
   positives.
+- Phase 4 GraphSAGE training: native `sample_neighbors` is actually
+  called during neighborhood expansion (spy/assert); `PairScorer` feeds
+  `evaluate_ranking`; negatives exclude train positives; held-out edges
+  stay out of the train CSR; tiny seeded synthetic smoke metrics are
+  finite in `[0, 1]` and reproducible. Label those metrics as protocol
+  smoke, not a MovieLens 100K result.

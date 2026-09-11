@@ -28,6 +28,11 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   compiled `graph_sampler` import, failure when the extension is missing
   or bypassed, seed reproducibility, empty / `k = 0` / full-neighborhood,
   multi-hop frontier expansion, and train-only CSR leakage.
-- Do not add GraphSAGE model/training tests or timing-benchmark tests in
-  this directory until those slices are explicitly opened.
+- Cover Phase 4 GraphSAGE training on tiny synthetic ADR-003 data:
+  native `sample_neighbors` is invoked (spy), reference/PyG samplers are
+  not used, `PairScorer` + `evaluate_ranking` smoke metrics are finite
+  in `[0, 1]` and reproducible, and held-out edges stay out of the train
+  CSR. Label those metrics as protocol smoke, not MovieLens 100K.
+- Do not add timing-benchmark tests or a GNN-versus-baseline quality
+  table in this directory until those slices are explicitly opened.
 - Keep type hints on test helpers that form part of a public-looking fixture.
