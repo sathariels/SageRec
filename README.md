@@ -102,7 +102,7 @@ If `files.grouplens.org` presents an expired TLS certificate, the downloader ret
 
 ## MovieLens 100K GraphSAGE quality run and GNN-versus-MF comparison
 
-Shared protocol with the stored MF run: ADR-003 leave-one-out, test split, Recall@10 / NDCG@10, 943 eligible users, seed **7**. GraphSAGE uses a modest CPU-friendly set (`embedding_dim=16`, `hidden_dim=16`, two layers, fanouts `(8, 8)`, **2 epochs**, `batch_size=256`, `learning_rate=0.05`, 2 negatives). MF used **1 epoch**; fairness is the shared eval protocol, not identical wall-clock. Extra training seeds are derived from 7 (`derived_sample_seed(seed, epoch, step)` per mini-batch; hop/source mixing inside multi-hop). Ranking encodes each graph node once at seed 7 via native sampling, then dots cached embeddings.
+Shared protocol with the stored MF run: ADR-003 leave-one-out, test split, Recall@10 / NDCG@10, 943 eligible users, seed **7**. GraphSAGE uses a modest CPU-friendly set (`embedding_dim=16`, `hidden_dim=16`, two layers, fanouts `(8, 8)`, **3 Adam epochs**, `batch_size=256`, `learning_rate=0.01`, 2 negatives). MF used **1 SGD epoch**; fairness is the shared eval protocol, not identical wall-clock or optimizer. Extra training seeds are derived from 7 (`derived_sample_seed(seed, epoch, step)` per mini-batch; hop/source mixing inside multi-hop). Ranking encodes each graph node once at seed 7 via native sampling, then dots cached embeddings.
 
 ```bash
 PYTHONPATH=build:python python3 scripts/run_graphsage_movielens_100k.py \

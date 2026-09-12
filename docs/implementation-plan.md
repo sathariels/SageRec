@@ -156,8 +156,8 @@ Opened in the MovieLens 100K GraphSAGE quality slice:
   using existing download/prep, train-only CSR, native mini-batch
   GraphSAGE, and shared `PairScorer` Recall@10 / NDCG@10.
 - Modest CPU-friendly hyperparams in `movielens_100k_config` (seed 7 to
-  match the stored MF run; 2 epochs, documented as not wall-clock-matched
-  to MF's 1 epoch).
+  match the stored MF run; 3 Adam epochs, documented as not wall-clock
+  or optimizer-matched to MF's 1 SGD epoch).
 - Provenance JSON `results/graphsage_movielens_100k.json` (single-seed,
   not a multi-seed leaderboard).
 - Comparison writer `python/sagerec_compare.py` plus

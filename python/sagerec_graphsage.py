@@ -94,6 +94,7 @@ class GraphSAGEConfig:
     l2: float = 1e-4
     seed: int = 0
     init_std: float = 0.1
+    optimizer: str = "sgd"
 
     def __post_init__(self) -> None:
         embedding_dim = _require_int(self.embedding_dim, "embedding_dim")
@@ -132,7 +133,17 @@ class GraphSAGEConfig:
             raise ValueError(f"l2 must be >= 0, got {l2}")
         if init_std <= 0.0:
             raise ValueError(f"init_std must be > 0, got {init_std}")
+        if not isinstance(self.optimizer, str):
+            raise ValueError(
+                f"optimizer must be a string, got {type(self.optimizer).__name__}"
+            )
+        optimizer = self.optimizer.lower()
+        if optimizer not in {"sgd", "adam"}:
+            raise ValueError(
+                f"optimizer must be 'sgd' or 'adam', got {self.optimizer!r}"
+            )
         object.__setattr__(self, "fanouts", fanouts)
+        object.__setattr__(self, "optimizer", optimizer)
 
     def as_dict(self) -> dict[str, Any]:
         """JSON-ready hyperparameter block (fanouts as a list)."""
@@ -148,6 +159,7 @@ class GraphSAGEConfig:
             "l2": self.l2,
             "seed": self.seed,
             "init_std": self.init_std,
+            "optimizer": self.optimizer,
         }
 
 
@@ -155,9 +167,9 @@ def movielens_100k_config(seed: int = 7) -> GraphSAGEConfig:
     """Modest CPU-friendly MovieLens 100K GraphSAGE hyperparameters.
 
     The default seed is **7** so the run is apples-to-apples with
-    ``results/mf_movielens_100k.json``. This uses **2 epochs** (MF used 1);
-    fairness is the shared ADR-003 ranking protocol, not identical
-    wall-clock or epoch count.
+    ``results/mf_movielens_100k.json``. This uses **3 Adam epochs** (MF used
+    1 SGD epoch); fairness is the shared ADR-003 ranking protocol, not
+    identical wall-clock or optimizer.
     """
     seed = _require_int(seed, "seed")
     return GraphSAGEConfig(
@@ -165,13 +177,14 @@ def movielens_100k_config(seed: int = 7) -> GraphSAGEConfig:
         hidden_dim=16,
         n_layers=2,
         fanouts=(8, 8),
-        n_epochs=2,
+        n_epochs=3,
         batch_size=256,
-        learning_rate=0.05,
+        learning_rate=0.01,
         n_negatives=2,
         l2=1e-4,
         seed=seed,
         init_std=0.1,
+        optimizer="adam",
     )
 
 
@@ -226,14 +239,22 @@ def _mean_neighbor_hidden(
 
 
 class SAGEMeanLayer(torch.nn.Module):
-    """One GraphSAGE mean layer: ReLU(W · concat(self, mean(neighbors)))."""
+    """One GraphSAGE mean layer: W · concat(self, mean(neighbors)).
 
-    def __init__(self, in_dim: int, out_dim: int) -> None:
+    Intermediate layers use ReLU. The last layer stays linear so ranking
+    scores are not forced through a non-negative squash.
+    """
+
+    def __init__(self, in_dim: int, out_dim: int, *, activate: bool) -> None:
         super().__init__()
         self.linear = torch.nn.Linear(in_dim * 2, out_dim)
+        self.activate = activate
 
     def forward(self, self_h: torch.Tensor, neigh_h: torch.Tensor) -> torch.Tensor:
-        return torch.relu(self.linear(torch.cat([self_h, neigh_h], dim=-1)))
+        hidden = self.linear(torch.cat([self_h, neigh_h], dim=-1))
+        if self.activate:
+            return torch.relu(hidden)
+        return hidden
 
 
 class GraphSAGERecommender(torch.nn.Module):
@@ -261,7 +282,11 @@ class GraphSAGERecommender(torch.nn.Module):
         dims = [config.embedding_dim]
         dims.extend([config.hidden_dim] * config.n_layers)
         self.layers = torch.nn.ModuleList(
-            SAGEMeanLayer(dims[index], dims[index + 1])
+            SAGEMeanLayer(
+                dims[index],
+                dims[index + 1],
+                activate=index < config.n_layers - 1,
+            )
             for index in range(config.n_layers)
         )
         self._eval_user: torch.Tensor | None = None
@@ -483,11 +508,18 @@ def fit_graphsage(
     )
     model = GraphSAGERecommender(sampler, config)
     model.train()
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=config.learning_rate,
-        weight_decay=config.l2,
-    )
+    if config.optimizer == "adam":
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.l2,
+        )
+    else:
+        optimizer = torch.optim.SGD(
+            model.parameters(),
+            lr=config.learning_rate,
+            weight_decay=config.l2,
+        )
     rng = np.random.default_rng(config.seed)
 
     for epoch in range(config.n_epochs):
