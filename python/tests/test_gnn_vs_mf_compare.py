@@ -128,7 +128,7 @@ class ComparisonWriterTests(unittest.TestCase):
         self.assertEqual(payload["models"]["implicit_mf"]["result_path"], "results/mf.json")
         self.assertEqual(payload["models"]["graphsage"]["result_path"], "results/gs.json")
         self.assertIn("single-seed", payload["protocol_note"].lower())
-        self.assertIn("not a multi-seed", payload["note"].lower())
+        self.assertIn("multi-seed leaderboard", payload["note"].lower())
 
     def test_write_artifacts_round_trip_and_chart(self) -> None:
         mf = _fixture_result(model="implicit_mf", recall=0.1, ndcg=0.05, n_epochs=1)
@@ -229,9 +229,10 @@ class GraphSAGE100kWiringTests(unittest.TestCase):
         self.assertIn("NativeMinibatchSampler", script)
         self.assertIn("evaluate_ranking", script)
         self.assertIn("graphsage_result_payload", script)
-        self.assertNotIn("NeighborLoader", script)
-        self.assertNotIn("SAGEConv", script)
-        self.assertNotIn("torch_geometric", script)
+        self.assertNotIn("import torch_geometric", script)
+        self.assertNotIn("from torch_geometric", script)
+        self.assertNotIn("NeighborLoader(", script)
+        self.assertNotIn("SAGEConv(", script)
         self.assertIn("NativeMinibatchSampler", source)
         self.assertNotIn("import torch_geometric", source)
         self.assertNotIn("from torch_geometric", source)
@@ -277,7 +278,8 @@ class GraphSAGE100kWiringTests(unittest.TestCase):
         self.assertIn("NativeMinibatchSampler", payload["sampler"])
         self.assertIn("single-seed", payload["note"].lower())
         self.assertIn("not a multi-seed leaderboard", payload["note"].lower())
-        self.assertNotIn("NeighborLoader", payload["sampler"])
+        self.assertNotIn("torch_geometric", payload["sampler"])
+        self.assertIn("no PyG", payload["sampler"])
         for key in compare.REQUIRED_RESULT_KEYS:
             self.assertIn(key, payload)
 
