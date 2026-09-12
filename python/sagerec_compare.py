@@ -43,6 +43,21 @@ class ComparisonError(ValueError):
     """Stored ranking results are missing fields or are not comparable."""
 
 
+def stored_result_ref(path: str | Path, repo_root: str | Path | None = None) -> str:
+    """POSIX path for provenance: relative to ``repo_root`` when possible."""
+    resolved = Path(path).resolve()
+    if repo_root is not None:
+        try:
+            return resolved.relative_to(Path(repo_root).resolve()).as_posix()
+        except ValueError:
+            pass
+    parts = resolved.parts
+    if "results" in parts:
+        start = parts.index("results")
+        return "/".join(parts[start:])
+    return Path(path).name
+
+
 def load_ranking_result(path: str | Path) -> dict[str, Any]:
     """Load one ranking-result JSON and validate the shared schema."""
     result_path = Path(path)
@@ -148,9 +163,12 @@ def build_comparison(
     gnn_path: str | Path,
     chart_path: str | Path | None = None,
     table_path: str | Path | None = None,
+    repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build the machine-readable comparison object from stored results."""
     assert_comparable(mf, gnn, mf_path=mf_path, gnn_path=gnn_path)
+    mf_ref = stored_result_ref(mf_path, repo_root)
+    gnn_ref = stored_result_ref(gnn_path, repo_root)
     mf_epochs = mf["hyperparams"].get("n_epochs")
     gnn_epochs = gnn["hyperparams"].get("n_epochs")
     payload: dict[str, Any] = {
@@ -173,14 +191,14 @@ def build_comparison(
         ),
         "models": {
             MF_MODEL: {
-                "result_path": str(mf_path),
+                "result_path": mf_ref,
                 "recall_at_k": mf["metrics"]["recall_at_k"],
                 "ndcg_at_k": mf["metrics"]["ndcg_at_k"],
                 "n_epochs": mf_epochs,
                 "hyperparams": dict(mf["hyperparams"]),
             },
             GRAPHSAGE_MODEL: {
-                "result_path": str(gnn_path),
+                "result_path": gnn_ref,
                 "recall_at_k": gnn["metrics"]["recall_at_k"],
                 "ndcg_at_k": gnn["metrics"]["ndcg_at_k"],
                 "n_epochs": gnn_epochs,
@@ -189,8 +207,8 @@ def build_comparison(
             },
         },
         "sources": {
-            MF_MODEL: str(mf_path),
-            GRAPHSAGE_MODEL: str(gnn_path),
+            MF_MODEL: mf_ref,
+            GRAPHSAGE_MODEL: gnn_ref,
         },
         "note": (
             "Values are copied from the stored result files. "
@@ -198,9 +216,9 @@ def build_comparison(
         ),
     }
     if chart_path is not None:
-        payload["chart_path"] = str(chart_path)
+        payload["chart_path"] = stored_result_ref(chart_path, repo_root)
     if table_path is not None:
-        payload["table_path"] = str(table_path)
+        payload["table_path"] = stored_result_ref(table_path, repo_root)
     return payload
 
 
@@ -334,6 +352,7 @@ def write_comparison_artifacts(
     json_path: str | Path,
     markdown_path: str | Path,
     chart_path: str | Path,
+    repo_root: str | Path | None = None,
 ) -> ComparisonArtifacts:
     """Load stored results and write JSON, markdown, and SVG artifacts."""
     mf = load_ranking_result(mf_path)
@@ -348,6 +367,7 @@ def write_comparison_artifacts(
         gnn_path=gnn_path,
         chart_path=chart_out,
         table_path=md_out,
+        repo_root=repo_root,
     )
     markdown = render_comparison_markdown(payload)
     svg = render_comparison_svg(payload)

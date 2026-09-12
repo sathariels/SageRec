@@ -119,6 +119,15 @@ The first command downloads and preps 100K if `data/processed/` is missing. Outp
 
 Keep [`results/mf_movielens_100k.json`](results/mf_movielens_100k.json) as the MF side of the comparison. Do not retcon it as GraphSAGE.
 
+Single-seed test-split numbers copied from those files (seed 7, 943 users):
+
+| Model | Epochs | Recall@10 | NDCG@10 |
+| --- | ---: | ---: | ---: |
+| implicit MF | 1 SGD | 0.038176 | 0.020303 |
+| GraphSAGE | 3 Adam | 0.047720 | 0.020969 |
+
+This is not a multi-seed leaderboard and not a production-quality claim.
+
 ## Owner decisions
 
 Recorded in [`docs/decisions.md`](docs/decisions.md):

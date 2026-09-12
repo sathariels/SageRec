@@ -59,6 +59,7 @@ def main() -> int:
         json_path=args.json_output,
         markdown_path=args.markdown_output,
         chart_path=args.chart_output,
+        repo_root=_REPO_ROOT,
     )
     print(json.dumps(artifacts.payload, indent=2))
     print(f"wrote {artifacts.json_path}")

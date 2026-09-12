@@ -1,0 +1,70 @@
+{
+  "model": "graphsage",
+  "dataset_edition": "100k",
+  "source_url": "https://files.grouplens.org/datasets/movielens/ml-100k.zip",
+  "checksum": "md5:0e33842e24a9c977be4e0107933c0723",
+  "license": "GroupLens MovieLens research license; see ml-100k-README.txt in the archive",
+  "split_policy_id": "per_user_chronological_leave_one_out",
+  "split_policy_version": "adr-003-v1",
+  "min_interactions_for_eval": 3,
+  "cold_start_policy": "all_to_train_exclude_from_eval",
+  "seed": 7,
+  "git_commit": "297dd1e7add2be2c6bf5b744ad9361b7e2099896",
+  "generated_at": "2026-09-12T19:07:44.701836+00:00",
+  "python": "3.12.3",
+  "numpy": "2.4.4",
+  "torch": "2.6.0+cpu",
+  "platform": {
+    "system": "Linux",
+    "release": "6.12.94+",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "hyperparams": {
+    "embedding_dim": 16,
+    "hidden_dim": 16,
+    "n_layers": 2,
+    "fanouts": [
+      8,
+      8
+    ],
+    "n_epochs": 3,
+    "batch_size": 256,
+    "learning_rate": 0.01,
+    "n_negatives": 2,
+    "l2": 0.0001,
+    "seed": 7,
+    "init_std": 0.1,
+    "optimizer": "adam"
+  },
+  "training_seeds": {
+    "experiment_seed": 7,
+    "python_numpy_torch": 7,
+    "pair_shuffle_and_negatives_rng": 7,
+    "minibatch_neighborhood_seed": "sagerec_minibatch.derived_sample_seed(seed, epoch, step)",
+    "multihop_native_call_seed": "sagerec_minibatch.derived_sample_seed(batch_seed, hop, source_index)",
+    "eval_all_node_embedding_seed": 7
+  },
+  "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+  "metrics": {
+    "k": 10,
+    "split": "test",
+    "recall_at_k": 0.04772004241781548,
+    "ndcg_at_k": 0.020968588363147352,
+    "n_evaluated_users": 943
+  },
+  "eligibility": {
+    "users": 943,
+    "movies": 1682,
+    "interactions": {
+      "total": 100000,
+      "train": 98114,
+      "validation": 943,
+      "test": 943
+    },
+    "eligible_users": 943,
+    "cold_start_users": 0,
+    "evaluated_users": 943
+  },
+  "note": "Single-seed MovieLens 100K GraphSAGE run on the ADR-003 split. Neighborhoods come from native sagerec_minibatch / graph_sampler; not a PyG NeighborLoader run and not a multi-seed leaderboard. Uses 3 epoch(s); fairness versus MF is the shared eval protocol, not identical wall-clock."
+}

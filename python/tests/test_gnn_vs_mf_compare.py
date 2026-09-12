@@ -196,6 +196,17 @@ class ComparisonWriterTests(unittest.TestCase):
                 compare.load_ranking_result(path)
             self.assertIn("[0, 1]", str(range_ctx.exception))
 
+    def test_stored_result_ref_is_repo_relative(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "results" / "mf.json"
+            path.parent.mkdir()
+            path.write_text("{}", encoding="utf-8")
+            self.assertEqual(
+                compare.stored_result_ref(path, repo_root=root),
+                "results/mf.json",
+            )
+
     def test_existing_mf_result_matches_comparison_schema(self) -> None:
         mf_path = Path(__file__).resolve().parents[2] / "results" / "mf_movielens_100k.json"
         payload = compare.load_ranking_result(mf_path)
@@ -203,6 +214,32 @@ class ComparisonWriterTests(unittest.TestCase):
         self.assertEqual(payload["seed"], 7)
         self.assertEqual(payload["metrics"]["k"], 10)
         self.assertEqual(payload["metrics"]["n_evaluated_users"], 943)
+
+    def test_committed_100k_results_are_comparable(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        mf_path = root / "results" / "mf_movielens_100k.json"
+        gnn_path = root / "results" / "graphsage_movielens_100k.json"
+        if not gnn_path.is_file():
+            self.skipTest("GraphSAGE 100K result file is not present")
+        mf = compare.load_ranking_result(mf_path)
+        gnn = compare.load_ranking_result(gnn_path)
+        compare.assert_comparable(mf, gnn, mf_path=mf_path, gnn_path=gnn_path)
+        payload = compare.build_comparison(
+            mf, gnn, mf_path=mf_path, gnn_path=gnn_path, repo_root=root
+        )
+        self.assertEqual(payload["models"]["implicit_mf"]["result_path"], "results/mf_movielens_100k.json")
+        self.assertEqual(
+            payload["models"]["graphsage"]["result_path"],
+            "results/graphsage_movielens_100k.json",
+        )
+        self.assertEqual(
+            payload["models"]["implicit_mf"]["recall_at_k"],
+            mf["metrics"]["recall_at_k"],
+        )
+        self.assertEqual(
+            payload["models"]["graphsage"]["recall_at_k"],
+            gnn["metrics"]["recall_at_k"],
+        )
 
 
 class GraphSAGE100kWiringTests(unittest.TestCase):
