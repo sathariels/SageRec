@@ -21,14 +21,16 @@ evaluator, a native-backed mini-batch neighborhood helper, GraphSAGE
 training on that harness, and CI.
 
 Phase 2 download + on-disk `processed/` prep is open for MovieLens 100K.
-Phase 2 timing charts remain closed. Phase 3 is open for the
+Phase 2 timing charts remain closed. Phase 3 is delivered for the
 matrix-factorization baseline and the shared Recall@10 / NDCG@10 evaluator.
-Phase 4 is open for GraphSAGE training on the native mini-batch harness
+Phase 4 is delivered for GraphSAGE training on the native mini-batch harness
 (the Python training data path must call `graph_sampler` /
-`sagerec_minibatch`; do not silently use a PyG NeighborLoader). Tiny
-synthetic protocol-smoke metrics only; do not invent MovieLens 100K GNN
-numbers or a GNN-versus-baseline quality table (Phase 5). Do not add
-MovieLens 1M or GCN paths.
+`sagerec_minibatch`; do not silently use a PyG NeighborLoader). Phase 5 is
+delivered for the single-seed MovieLens 100K GraphSAGE quality run and the
+GNN-versus-MF comparison table/chart under `results/`. Tiny synthetic
+GraphSAGE metrics remain protocol smoke and must stay separate from the
+stored 100K numbers. Do not add MovieLens 1M or GCN paths. Do not invent
+metrics.
 
 ## Read order
 

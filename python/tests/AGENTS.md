@@ -33,6 +33,10 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   not used, `PairScorer` + `evaluate_ranking` smoke metrics are finite
   in `[0, 1]` and reproducible, and held-out edges stay out of the train
   CSR. Label those metrics as protocol smoke, not MovieLens 100K.
-- Do not add timing-benchmark tests or a GNN-versus-baseline quality
-  table in this directory until those slices are explicitly opened.
+- Cover Phase 5 comparison-writer schema and protocol-match checks on
+  fixture JSON (no invented 100K numbers). Cover GraphSAGE 100K wiring:
+  `movielens_100k_config` seed 7, native `NativeMinibatchSampler`
+  requirement, and a native `sample_neighbors` spy on eval materialize.
+- Do not add timing-benchmark tests. Default CI must not download
+  MovieLens or run the 100K quality job.
 - Keep type hints on test helpers that form part of a public-looking fixture.

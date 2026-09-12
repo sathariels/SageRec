@@ -87,6 +87,8 @@ class GraphSAGEModuleContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             graphsage.GraphSAGEConfig(learning_rate=0.0)
         with self.assertRaises(ValueError):
+            graphsage.GraphSAGEConfig(optimizer="rmsprop")
+        with self.assertRaises(ValueError):
             graphsage.fit_graphsage([], num_users=1, num_items=1)
 
 

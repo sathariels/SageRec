@@ -12,7 +12,9 @@ GitHub Actions here must verify the native foundation without side effects.
 - Do not add MovieLens 1M or GCN jobs. Phase 3 Python tests need NumPy
   (`python3-numpy`); they must keep using in-memory synthetic fixtures.
   Phase 4 mini-batch and GraphSAGE training tests must keep using the
-  compiled `graph_sampler` extension and tiny synthetic graphs. Default
-  CI may install CPU-only PyTorch for GraphSAGE tests; do not add CUDA
-  wheels, PyG NeighborLoader jobs, MovieLens downloads, or a Phase 5
-  quality-table job.
+  compiled `graph_sampler` extension and tiny synthetic graphs. Phase 5
+  comparison-writer tests must use fixture JSON (or the committed MF
+  result file) and must not download MovieLens or train 100K in CI.
+  Default CI may install CPU-only PyTorch for GraphSAGE tests; do not add
+  CUDA wheels, PyG NeighborLoader jobs, MovieLens downloads, or a live
+  100K quality-table job.

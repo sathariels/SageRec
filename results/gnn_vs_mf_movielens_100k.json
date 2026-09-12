@@ -1,0 +1,60 @@
+{
+  "comparison": "gnn_vs_mf",
+  "dataset_edition": "100k",
+  "split_policy_id": "per_user_chronological_leave_one_out",
+  "split_policy_version": "adr-003-v1",
+  "min_interactions_for_eval": 3,
+  "cold_start_policy": "all_to_train_exclude_from_eval",
+  "split": "test",
+  "k": 10,
+  "seed": 7,
+  "n_evaluated_users": 943,
+  "protocol_note": "Same ADR-003 split, eligible users, candidate protocol, and Recall@10 / NDCG@10. Single-seed comparison, not a multi-seed leaderboard. Fairness is the shared eval protocol, not identical wall-clock or epoch count (MF n_epochs=1, GraphSAGE n_epochs=3).",
+  "models": {
+    "implicit_mf": {
+      "result_path": "results/mf_movielens_100k.json",
+      "recall_at_k": 0.03817603393425239,
+      "ndcg_at_k": 0.020303175177886473,
+      "n_epochs": 1,
+      "hyperparams": {
+        "n_factors": 16,
+        "n_epochs": 1,
+        "learning_rate": 0.05,
+        "n_negatives": 2,
+        "l2": 0.01,
+        "init_std": 0.1
+      }
+    },
+    "graphsage": {
+      "result_path": "results/graphsage_movielens_100k.json",
+      "recall_at_k": 0.04772004241781548,
+      "ndcg_at_k": 0.020968588363147352,
+      "n_epochs": 3,
+      "hyperparams": {
+        "embedding_dim": 16,
+        "hidden_dim": 16,
+        "n_layers": 2,
+        "fanouts": [
+          8,
+          8
+        ],
+        "n_epochs": 3,
+        "batch_size": 256,
+        "learning_rate": 0.01,
+        "n_negatives": 2,
+        "l2": 0.0001,
+        "seed": 7,
+        "init_std": 0.1,
+        "optimizer": "adam"
+      },
+      "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)"
+    }
+  },
+  "sources": {
+    "implicit_mf": "results/mf_movielens_100k.json",
+    "graphsage": "results/graphsage_movielens_100k.json"
+  },
+  "note": "Values are copied from the stored result files. Do not treat this as a published multi-seed leaderboard.",
+  "chart_path": "results/gnn_vs_mf_movielens_100k.svg",
+  "table_path": "results/gnn_vs_mf_movielens_100k.md"
+}
