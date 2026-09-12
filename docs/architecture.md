@@ -165,7 +165,8 @@ native Fisher–Yates prefix, `std::mt19937_64` seed, and unbiased
 The Phase 4 harness (`python/sagerec_minibatch.py`) builds a train-only
 `BipartiteCSR` from local pairs and expands seeded multi-hop neighborhoods by
 calling native `sample_neighbors`. GraphSAGE training (`python/sagerec_graphsage.py`)
-consumes those batches; the helper itself does not own layers or metrics.
+consumes those batches, including the Phase 5 MovieLens 100K quality run;
+the helper itself does not own layers or metrics.
 Current one-hop behavior:
 
 | Topic | Implementation contract |
@@ -216,11 +217,17 @@ PyG NeighborLoader.
    (`python/sagerec_graphsage.py`).
 7. Evaluate checkpoints with the fixed ranking protocol via
    `PairScorer` + `sagerec_metrics.evaluate_ranking`. Tiny synthetic
-   metrics are protocol smoke, not a MovieLens 100K result.
+   metrics are protocol smoke. The Phase 5 MovieLens 100K GraphSAGE
+   quality run uses the same evaluator on the ADR-003 test split.
+8. Compare stored MF and GraphSAGE result JSONs with
+   `python/sagerec_compare.py` (same split, eligible users, candidate
+   protocol, and metrics).
 
 The GNN family is GraphSAGE (ADR-002). PyTorch Geometric remains the
 intended production training stack; this slice trains with CPU PyTorch
-on native samples.
+on native samples. Ranking on 100K materializes one native-sampled
+embedding per graph node at the experiment seed, then scores pairs with
+inner products. Training still samples independently per mini-batch.
 
 ## Baseline (ADR-004)
 
@@ -260,7 +267,10 @@ The shared protocol for this slice:
 - Rank by score descending; ties break on smaller `movie_id`.
 - Report Recall@10 and NDCG@10 per user, then macro-average.
 - Tiny synthetic unittest metrics are protocol verification, not a
-  MovieLens 100K quality claim.
+  MovieLens 100K quality claim. Stored 100K numbers live under `results/`
+  with provenance (`mf_movielens_100k.json`,
+  `graphsage_movielens_100k.json`, and the generated comparison
+  artifacts).
 
 ## Benchmark boundary
 

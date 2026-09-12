@@ -1,4 +1,4 @@
-"""GraphSAGE training on the native mini-batch harness (Phase 4).
+"""GraphSAGE training on the native mini-batch harness (Phase 4 / Phase 5).
 
 Neighborhood expansion always goes through ``sagerec_minibatch`` /
 ``graph_sampler.BipartiteCSR.sample_neighbors`` (ADR-005). This module does
@@ -7,13 +7,15 @@ not import or call a PyG ``NeighborLoader`` / neighbor sampler.
 Layers are GraphSAGE-style mean aggregation implemented in PyTorch. PyTorch
 Geometric remains the intended production training stack for later SAGEConv
 / tensor conversion; this slice is a native-backed PyTorch trainer, not a
-NumPy stand-in and not a MovieLens 100K quality run.
+NumPy stand-in. MovieLens 100K quality numbers come from
+``movielens_100k_config`` + the 100K train/eval script, never from the tiny
+synthetic protocol smoke.
 """
 
 from __future__ import annotations
 
 import random
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -132,6 +134,96 @@ class GraphSAGEConfig:
             raise ValueError(f"init_std must be > 0, got {init_std}")
         object.__setattr__(self, "fanouts", fanouts)
 
+    def as_dict(self) -> dict[str, Any]:
+        """JSON-ready hyperparameter block (fanouts as a list)."""
+        return {
+            "embedding_dim": self.embedding_dim,
+            "hidden_dim": self.hidden_dim,
+            "n_layers": self.n_layers,
+            "fanouts": list(self.fanouts),
+            "n_epochs": self.n_epochs,
+            "batch_size": self.batch_size,
+            "learning_rate": self.learning_rate,
+            "n_negatives": self.n_negatives,
+            "l2": self.l2,
+            "seed": self.seed,
+            "init_std": self.init_std,
+        }
+
+
+def movielens_100k_config(seed: int = 7) -> GraphSAGEConfig:
+    """Modest CPU-friendly MovieLens 100K GraphSAGE hyperparameters.
+
+    The default seed is **7** so the run is apples-to-apples with
+    ``results/mf_movielens_100k.json``. This uses **2 epochs** (MF used 1);
+    fairness is the shared ADR-003 ranking protocol, not identical
+    wall-clock or epoch count.
+    """
+    seed = _require_int(seed, "seed")
+    return GraphSAGEConfig(
+        embedding_dim=16,
+        hidden_dim=16,
+        n_layers=2,
+        fanouts=(8, 8),
+        n_epochs=2,
+        batch_size=256,
+        learning_rate=0.05,
+        n_negatives=2,
+        l2=1e-4,
+        seed=seed,
+        init_std=0.1,
+    )
+
+
+def graphsage_training_seed_notes(seed: int) -> dict[str, int | str]:
+    """Document per-step seeds derived from the experiment seed."""
+    seed = _require_int(seed, "seed")
+    if seed < 0:
+        raise ValueError(f"seed must be >= 0, got {seed}")
+    return {
+        "experiment_seed": seed,
+        "python_numpy_torch": seed,
+        "pair_shuffle_and_negatives_rng": seed,
+        "minibatch_neighborhood_seed": (
+            "sagerec_minibatch.derived_sample_seed(seed, epoch, step)"
+        ),
+        "multihop_native_call_seed": (
+            "sagerec_minibatch.derived_sample_seed(batch_seed, hop, source_index)"
+        ),
+        "eval_all_node_embedding_seed": seed,
+    }
+
+
+def _mean_neighbor_hidden(
+    hidden: torch.Tensor,
+    neighbor_lists: Sequence[Sequence[int]],
+    index: Mapping[int, int],
+) -> torch.Tensor:
+    """Mean-pool neighbor rows; isolated sources stay the zero vector."""
+    n_sources = len(neighbor_lists)
+    dim = hidden.size(-1)
+    if n_sources == 0:
+        return hidden.new_zeros((0, dim))
+    rows: list[int] = []
+    cols: list[int] = []
+    for row, neighbors in enumerate(neighbor_lists):
+        for node in neighbors:
+            rows.append(row)
+            cols.append(index[int(node)])
+    out = hidden.new_zeros((n_sources, dim))
+    if not rows:
+        return out
+    row_idx = torch.tensor(rows, dtype=torch.long, device=hidden.device)
+    col_idx = torch.tensor(cols, dtype=torch.long, device=hidden.device)
+    out.index_add_(0, row_idx, hidden[col_idx])
+    counts = torch.zeros(n_sources, dtype=hidden.dtype, device=hidden.device)
+    counts.index_add_(
+        0,
+        row_idx,
+        torch.ones(len(rows), dtype=hidden.dtype, device=hidden.device),
+    )
+    return out / counts.clamp(min=1.0).unsqueeze(-1)
+
 
 class SAGEMeanLayer(torch.nn.Module):
     """One GraphSAGE mean layer: ReLU(W · concat(self, mean(neighbors)))."""
@@ -172,6 +264,8 @@ class GraphSAGERecommender(torch.nn.Module):
             SAGEMeanLayer(dims[index], dims[index + 1])
             for index in range(config.n_layers)
         )
+        self._eval_user: torch.Tensor | None = None
+        self._eval_item: torch.Tensor | None = None
 
     @property
     def num_users(self) -> int:
@@ -219,17 +313,7 @@ class GraphSAGERecommender(torch.nn.Module):
                 continue
             source_positions = [index[int(node)] for node in sources]
             self_h = hidden[source_positions]
-            aggregates: list[torch.Tensor] = []
-            feature_dim = hidden.size(-1)
-            for neighbors in neighbor_lists:
-                if not neighbors:
-                    aggregates.append(
-                        hidden.new_zeros(feature_dim)
-                    )
-                else:
-                    neighbor_positions = [index[int(node)] for node in neighbors]
-                    aggregates.append(hidden[neighbor_positions].mean(dim=0))
-            neigh_h = torch.stack(aggregates, dim=0)
+            neigh_h = _mean_neighbor_hidden(hidden, neighbor_lists, index)
             updated = self.layers[layer_index](self_h, neigh_h)
             if updated.size(-1) != hidden.size(-1):
                 next_hidden = hidden.new_zeros(hidden.size(0), updated.size(-1))
@@ -296,15 +380,39 @@ class GraphSAGERecommender(torch.nn.Module):
         self.eval()
         try:
             with torch.no_grad():
-                scores = self.score_encoded(
-                    [int(value) for value in users],
-                    [int(value) for value in items],
-                    self.config.seed,
-                )
+                if self._eval_user is None or self._eval_item is None:
+                    self.materialize_eval_embeddings()
+                assert self._eval_user is not None
+                assert self._eval_item is not None
+                user_h = self._eval_user[torch.as_tensor(users, dtype=torch.long)]
+                item_h = self._eval_item[torch.as_tensor(items, dtype=torch.long)]
+                scores = (user_h * item_h).sum(dim=-1)
         finally:
             if was_training:
                 self.train()
         return scores.detach().cpu().numpy().astype(np.float64, copy=False)
+
+    def clear_eval_embeddings(self) -> None:
+        """Drop cached ranking embeddings so the next ``score_pairs`` re-encodes."""
+        self._eval_user = None
+        self._eval_item = None
+
+    def materialize_eval_embeddings(self) -> None:
+        """Encode every graph node once via native multi-hop sampling.
+
+        Ranking then uses cached inner products. Training still samples
+        independently per mini-batch through ``score_encoded``. The all-node
+        encode uses ``config.seed`` (see ``graphsage_training_seed_notes``).
+        """
+        node_ids = list(range(self.sampler.num_nodes))
+        encoded = self.encode_nodes(node_ids, self.config.seed)
+        if encoded.size(0) != self.sampler.num_nodes:
+            raise RuntimeError(
+                "eval encode must return one row per graph node, "
+                f"got {encoded.size(0)} for {self.sampler.num_nodes} nodes"
+            )
+        self._eval_user = encoded[: self.num_users].detach()
+        self._eval_item = encoded[self.num_users :].detach()
 
 
 def _unique_train_pairs(
@@ -344,6 +452,7 @@ def fit_graphsage(
     num_items: int,
     config: GraphSAGEConfig | None = None,
     forbidden_pairs: Sequence[tuple[int, int]] | None = None,
+    progress: Callable[[int, int, float], None] | None = None,
 ) -> GraphSAGERecommender:
     """Train GraphSAGE on ``train_pairs`` only, sampling via ``graph_sampler``.
 
@@ -416,6 +525,8 @@ def fit_graphsage(
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            if progress is not None:
+                progress(epoch, step, float(loss.detach().cpu()))
 
     model.eval()
     return model
@@ -424,6 +535,7 @@ def fit_graphsage(
 def train_graphsage(
     split: SplitResult,
     config: GraphSAGEConfig | None = None,
+    progress: Callable[[int, int, float], None] | None = None,
 ) -> GraphSAGERecommender:
     """Fit GraphSAGE on ADR-003 training positives only."""
     train_pairs = split.train_positive_pairs()
@@ -440,4 +552,78 @@ def train_graphsage(
         num_users=split.num_users,
         num_items=split.num_movies,
         config=config,
+        progress=progress,
     )
+
+
+def graphsage_result_payload(
+    *,
+    manifest: Mapping[str, Any],
+    config: GraphSAGEConfig,
+    report: Any,
+    git_commit: str | None,
+    generated_at: str,
+    python_version: str,
+    numpy_version: str,
+    torch_version: str,
+    platform_info: Mapping[str, str],
+) -> dict[str, Any]:
+    """Machine-readable MovieLens 100K GraphSAGE provenance (mirrors MF JSON)."""
+    required_manifest = (
+        "dataset_edition",
+        "split_policy_id",
+        "split_policy_version",
+        "min_interactions_for_eval",
+        "cold_start_policy",
+        "counts",
+    )
+    missing = [key for key in required_manifest if key not in manifest]
+    if missing:
+        raise ValueError(f"manifest is missing required keys: {missing}")
+    counts = manifest["counts"]
+    return {
+        "model": "graphsage",
+        "dataset_edition": manifest["dataset_edition"],
+        "source_url": manifest.get("source_url"),
+        "checksum": manifest.get("checksum"),
+        "license": manifest.get("license"),
+        "split_policy_id": manifest["split_policy_id"],
+        "split_policy_version": manifest["split_policy_version"],
+        "min_interactions_for_eval": manifest["min_interactions_for_eval"],
+        "cold_start_policy": manifest["cold_start_policy"],
+        "seed": config.seed,
+        "git_commit": git_commit,
+        "generated_at": generated_at,
+        "python": python_version,
+        "numpy": numpy_version,
+        "torch": torch_version,
+        "platform": dict(platform_info),
+        "hyperparams": config.as_dict(),
+        "training_seeds": graphsage_training_seed_notes(config.seed),
+        "sampler": (
+            "graph_sampler.BipartiteCSR.sample_neighbors via "
+            "sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)"
+        ),
+        "metrics": {
+            "k": report.k,
+            "split": report.split,
+            "recall_at_k": report.recall_at_k,
+            "ndcg_at_k": report.ndcg_at_k,
+            "n_evaluated_users": report.n_users,
+        },
+        "eligibility": {
+            "users": counts["users"],
+            "movies": counts["movies"],
+            "interactions": counts["interactions"],
+            "eligible_users": counts["eligible_users"],
+            "cold_start_users": counts["cold_start_users"],
+            "evaluated_users": report.n_users,
+        },
+        "note": (
+            "Single-seed MovieLens 100K GraphSAGE run on the ADR-003 split. "
+            "Neighborhoods come from native sagerec_minibatch / graph_sampler; "
+            "not a PyG NeighborLoader run and not a multi-seed leaderboard. "
+            f"Uses {config.n_epochs} epoch(s); fairness versus MF is the shared "
+            "eval protocol, not identical wall-clock."
+        ),
+    }

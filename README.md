@@ -4,7 +4,7 @@
 
 SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, and GraphSAGE training on that harness.
 
-GraphSAGE is the accepted GNN direction. Phase 4 is **open for GraphSAGE training** on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). There is **no MovieLens 100K GNN quality table** yet — that is Phase 5. Tiny synthetic GraphSAGE metrics are protocol smoke, not a 100K result.
+GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -13,9 +13,9 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | Built | Not yet |
 | --- | --- |
 | C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | C++ vs Python timing charts and stored speedups |
-| MovieLens 100K in-memory `u.data` parser | MovieLens 100K GraphSAGE metrics / leaderboard |
-| Official 100K download + on-disk `data/processed/` prep | GNN-versus-baseline comparison chart (Phase 5) |
-| Native-backed mini-batch neighborhood helper | PyG NeighborLoader / SAGEConv (intended later) |
+| MovieLens 100K in-memory `u.data` parser | PyG NeighborLoader / SAGEConv (intended later) |
+| Official 100K download + on-disk `data/processed/` prep | Production serving |
+| Native-backed mini-batch neighborhood helper | Multi-seed published leaderboard |
 | GraphSAGE training on native samples (CPU PyTorch) | |
 | pybind11 `graph_sampler` bindings | |
 | Python reference sampler + native parity tests | |
@@ -23,9 +23,11 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | Implicit MF baseline (NumPy logistic SGD) | |
 | Shared Recall@10 / NDCG@10 evaluator | |
 | Single-seed MovieLens 100K MF metrics in [`results/mf_movielens_100k.json`](results/mf_movielens_100k.json) | |
+| Single-seed MovieLens 100K GraphSAGE metrics in [`results/graphsage_movielens_100k.json`](results/graphsage_movielens_100k.json) | |
+| GNN-versus-MF comparison JSON, markdown table, and SVG chart | |
 | Release CMake build + GitHub Actions CI | |
 
-The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). That file is **not** GraphSAGE training and **not** a published 100K leaderboard.
+The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF and GraphSAGE metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). Each file is a **single-seed** 100K run, not a published multi-seed leaderboard. The MF JSON is not a GraphSAGE result.
 
 ## Why this project
 
@@ -39,7 +41,7 @@ The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatc
 
 ## Architecture
 
-Intended system. Solid arrows are implemented. Dashed arrows lead to work that is **not implemented** (timing charts). GraphSAGE evaluation on tiny synthetic data is implemented; the Phase 5 100K comparison is not.
+Intended system. Solid arrows are implemented. Dashed arrows lead to work that is **not implemented** (timing charts). The Phase 5 100K comparison table/chart is implemented from stored MF and GraphSAGE result files.
 
 ```mermaid
 flowchart LR
@@ -75,10 +77,11 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10 |
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
 | GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — CPU PyTorch mean layers + `PairScorer` on native samples |
+| Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE-smoke launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/comparison/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE launchers.
 
 ## MovieLens 100K download and prep
 
@@ -96,6 +99,25 @@ PYTHONPATH=build:python python3 scripts/prepare_movielens_100k.py \
 `data/raw/` and `data/processed/` stay gitignored except schemas and agent guides. Do not commit the zip or `u.data`. MovieLens 1M is refused.
 
 If `files.grouplens.org` presents an expired TLS certificate, the downloader retries without TLS verification **only when** the expected archive MD5 will still be checked.
+
+## MovieLens 100K GraphSAGE quality run and GNN-versus-MF comparison
+
+Shared protocol with the stored MF run: ADR-003 leave-one-out, test split, Recall@10 / NDCG@10, 943 eligible users, seed **7**. GraphSAGE uses a modest CPU-friendly set (`embedding_dim=16`, `hidden_dim=16`, two layers, fanouts `(8, 8)`, **2 epochs**, `batch_size=256`, `learning_rate=0.05`, 2 negatives). MF used **1 epoch**; fairness is the shared eval protocol, not identical wall-clock. Extra training seeds are derived from 7 (`derived_sample_seed(seed, epoch, step)` per mini-batch; hop/source mixing inside multi-hop). Ranking encodes each graph node once at seed 7 via native sampling, then dots cached embeddings.
+
+```bash
+PYTHONPATH=build:python python3 scripts/run_graphsage_movielens_100k.py \
+  --processed-dir data/processed --raw-dir data/raw --seed 7
+PYTHONPATH=build:python python3 scripts/write_gnn_vs_mf_comparison.py
+```
+
+The first command downloads and preps 100K if `data/processed/` is missing. Outputs:
+
+- [`results/graphsage_movielens_100k.json`](results/graphsage_movielens_100k.json)
+- [`results/gnn_vs_mf_movielens_100k.json`](results/gnn_vs_mf_movielens_100k.json)
+- [`results/gnn_vs_mf_movielens_100k.md`](results/gnn_vs_mf_movielens_100k.md)
+- [`results/gnn_vs_mf_movielens_100k.svg`](results/gnn_vs_mf_movielens_100k.svg)
+
+Keep [`results/mf_movielens_100k.json`](results/mf_movielens_100k.json) as the MF side of the comparison. Do not retcon it as GraphSAGE.
 
 ## Owner decisions
 
@@ -137,6 +159,7 @@ PYTHONPATH=build:python python3 -m unittest python/tests/test_mf_baseline.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_minibatch_native.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_graphsage_train.py -v
 PYTHONPATH=build:python python3 scripts/run_graphsage_synthetic_smoke.py
+PYTHONPATH=build:python python3 -m unittest python/tests/test_gnn_vs_mf_compare.py -v
 ```
 
 Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
@@ -145,11 +168,12 @@ Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only 
 
 ## Honesty
 
-- No production users, no claimed latency speedups, no invented 100K GNN metrics.
+- No production users, no claimed latency speedups, no invented metrics.
 - Tiny synthetic MF and GraphSAGE smokes are protocol verification, not MovieLens 100K evaluation.
 - A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE and not a multi-seed leaderboard.
-- GraphSAGE training calls `graph_sampler` via `sagerec_minibatch`. It does not produce MovieLens 100K quality numbers.
-- Timing charts and the Phase 5 GNN-versus-baseline comparison are still ahead.
+- A single-seed 100K GraphSAGE run is recorded under `results/graphsage_movielens_100k.json`. Neighborhoods come from `graph_sampler` via `sagerec_minibatch`, not a PyG NeighborLoader.
+- The Phase 5 comparison table/chart is generated from those two JSON files.
+- Timing charts and a PyG production training path are still ahead.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.

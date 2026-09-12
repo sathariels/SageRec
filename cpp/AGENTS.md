@@ -52,9 +52,10 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
 - CTest `python_binding_smoke` discovers `python/tests`, including
   native-vs-reference sampler parity, ADR-003 prep tests, Phase 2
   download/prep fixture tests, the Phase 3 MF ranking smoke, and the
-  Phase 4 mini-batch native-sampler tests, and Phase 4 GraphSAGE
+  Phase 4 mini-batch native-sampler tests, Phase 4 GraphSAGE
   training smoke (CPU PyTorch; native `sample_neighbors` on the
-  training path).
+  training path), and Phase 5 comparison-writer / 100K-wiring tests
+  (fixture JSON + tiny synthetic graphs; no live 100K download).
   PYTHONPATH includes the build directory and `python/` so `sagerec_*`
   modules import cleanly.
 

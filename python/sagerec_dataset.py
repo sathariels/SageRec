@@ -206,6 +206,61 @@ def prepare_movielens_100k(
     )
 
 
+def processed_artifacts_exist(processed_dir: str | Path) -> bool:
+    """True when on-disk prep wrote the four ADR-003 artifacts."""
+    dest = Path(processed_dir)
+    return all(
+        (dest / name).is_file()
+        for name in (MANIFEST_NAME, ASSIGNMENTS_NAME, TRAIN_PAIRS_NAME, MAPPINGS_NAME)
+    )
+
+
+def ensure_movielens_100k_processed(
+    processed_dir: str | Path,
+    raw_dir: str | Path,
+    *,
+    udata_path: str | Path | None = None,
+    download_if_missing: bool = True,
+) -> tuple[prep.SplitResult, prep.DatasetManifest]:
+    """Load existing ``processed/`` artifacts or download + prep MovieLens 100K.
+
+    Does not invent metrics. Held-out positives stay out of ``train_pairs``.
+    MovieLens 1M is refused by the downloader.
+    """
+    dest = Path(processed_dir)
+    if processed_artifacts_exist(dest):
+        return load_split_from_processed(dest), load_manifest(dest)
+
+    raw = Path(raw_dir)
+    udata = Path(udata_path) if udata_path is not None else raw / "ml-100k" / "u.data"
+    if not udata.is_file():
+        if not download_if_missing:
+            raise MovieLensPrepError(
+                f"u.data not found at {udata} and download_if_missing is false. "
+                "Download the official 100K archive first or pass an existing "
+                f"processed directory ({dest})."
+            )
+        result = download.download_movielens_100k(raw)
+        udata = result.udata_path
+        prepared = prepare_movielens_100k(
+            udata,
+            dest,
+            source_url=result.source_url,
+            checksum=download.format_checksum("md5", result.archive_md5),
+            license=download.MOVIELENS_100K_LICENSE,
+        )
+        return prepared.split, prepared.manifest
+
+    prepared = prepare_movielens_100k(
+        udata,
+        dest,
+        source_url=download.MOVIELENS_100K_URL,
+        checksum=download.format_checksum("md5", download.MOVIELENS_100K_ARCHIVE_MD5),
+        license=download.MOVIELENS_100K_LICENSE,
+    )
+    return prepared.split, prepared.manifest
+
+
 def load_manifest(processed_dir: str | Path) -> prep.DatasetManifest:
     path = Path(processed_dir) / MANIFEST_NAME
     if not path.is_file():

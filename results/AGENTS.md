@@ -11,5 +11,8 @@ dependency versions, hardware/device, timestamp, and protocol version.
 - Clearly distinguish smoke runs from final experiments.
 - Compare models with identical eligible users and ranking candidates.
 - Include Recall@10 and NDCG@10 for the GNN and accepted baseline.
-- Include native/reference timings and speedup with benchmark context.
+- Phase 5 comparison artifacts must be generated from stored MF and
+  GraphSAGE JSON files; do not hand-edit or invent those numbers.
+- Include native/reference timings and speedup with benchmark context
+  only when a timing slice is opened (still closed).
 - Keep checkpoints and bulky per-run logs in ignored subdirectories.

@@ -4,10 +4,10 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), and ADR-005
 (uniform sampling without replacement) are accepted. MovieLens 1M remains
 deferred. Phase 2 download and on-disk `processed/` prep are open for
-MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 is open for
-GraphSAGE training on the native-backed mini-batch harness. Full project
-acceptance still needs the Phase 5 GNN-versus-baseline comparison; do not
-claim MovieLens 100K GraphSAGE leaderboard numbers.
+MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 GraphSAGE training on the native-backed mini-batch harness is
+delivered. Phase 5 is delivered for the single-seed 100K GraphSAGE run
+and GNN-versus-MF comparison (not a multi-seed leaderboard). Phase 2
+timing charts remain closed.
 
 ## Phase 1: Native foundation
 
@@ -100,8 +100,9 @@ Opened in the ADR-004 matrix-factorization slice:
 
 Still not started:
 
-- A GNN-versus-baseline quality table (Phase 5).
 - node2vec (rejected unless a superseding ADR accepts it).
+- The Phase 5 GNN-versus-baseline table is generated from stored
+  100K result files (do not invent numbers).
 - Do not invent MovieLens 100K quality numbers. A real single-seed 100K MF
   run is stored under `results/mf_movielens_100k.json` when generated from
   the official archive (not a GraphSAGE or multi-seed leaderboard).
@@ -140,20 +141,36 @@ Opened in the GraphSAGE training slice:
 
 Still not started:
 
-- MovieLens 100K GraphSAGE quality numbers or a GNN-versus-baseline
-  comparison table/chart (Phase 5).
 - PyG `SAGEConv` / NeighborLoader integration. Do not silently substitute
   a PyG sampler.
 
 Exit condition: reproducible tiny GraphSAGE training smoke exists and
-proves native sampling is on the training path. Phase 5 still owns the
-100K GNN-versus-baseline report.
+proves native sampling is on the training path. Phase 5 owns the 100K
+GNN-versus-baseline report.
 
 ## Phase 5: Comparison and documentation
 
-- Run consistent multi-seed experiments where practical.
-- Generate final metric table and chart.
-- Document setup, architecture, commands, results, limitations, and troubleshooting.
-- Run all quality gates from a clean environment.
+Opened in the MovieLens 100K GraphSAGE quality slice:
 
-Exit condition: all project acceptance criteria pass.
+- Runnable 100K train+eval path (`scripts/run_graphsage_movielens_100k.py`)
+  using existing download/prep, train-only CSR, native mini-batch
+  GraphSAGE, and shared `PairScorer` Recall@10 / NDCG@10.
+- Modest CPU-friendly hyperparams in `movielens_100k_config` (seed 7 to
+  match the stored MF run; 2 epochs, documented as not wall-clock-matched
+  to MF's 1 epoch).
+- Provenance JSON `results/graphsage_movielens_100k.json` (single-seed,
+  not a multi-seed leaderboard).
+- Comparison writer `python/sagerec_compare.py` plus
+  `scripts/write_gnn_vs_mf_comparison.py`: machine-readable JSON,
+  markdown table, and SVG chart generated from the stored MF and
+  GraphSAGE files (no invented metrics).
+- Tests for comparison schema/protocol match and native 100K wiring.
+
+Still not started:
+
+- Multi-seed published leaderboard / uncertainty bars.
+- PyG production path and Phase 2 timing charts.
+
+Exit condition: stored 100K GraphSAGE metrics with provenance, comparison
+table/chart consistent with both result files, and CI green (CTest +
+Python tests). Timing charts remain out of scope.

@@ -22,7 +22,15 @@ Opened Phase 4 GraphSAGE synthetic smoke:
   smoke using native `sagerec_minibatch`. Prints labeled protocol-smoke
   metrics; do not write MovieLens 100K GNN result files.
 
-Do not add MovieLens 1M, timing-benchmark, or Phase 5 comparison scripts
-until those slices are opened. The Phase 4 mini-batch helper lives in
-`python/sagerec_minibatch.py`. GraphSAGE training lives in
-`python/sagerec_graphsage.py`.
+Opened Phase 5 100K GraphSAGE + comparison:
+
+- `run_graphsage_movielens_100k.py` — download/prep if needed, train
+  GraphSAGE on the native mini-batch harness (seed 7), evaluate with
+  shared `PairScorer` metrics, write `results/graphsage_movielens_100k.json`.
+- `write_gnn_vs_mf_comparison.py` — read stored MF + GraphSAGE JSONs and
+  write comparison JSON, markdown table, and SVG chart. Does not invent
+  metrics.
+
+Do not add MovieLens 1M or timing-benchmark scripts. The Phase 4
+mini-batch helper lives in `python/sagerec_minibatch.py`. GraphSAGE
+training lives in `python/sagerec_graphsage.py`.

@@ -5,9 +5,10 @@
 Own native-extension stubs, binding tests, the reference sampler,
 MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
 `processed/` writes, the implicit MF baseline (ADR-004), the shared
-ranking evaluator, the native-backed mini-batch neighborhood helper, and
-GraphSAGE training on that harness. Later: benchmark coordination,
-Phase 5 GNN-versus-baseline comparison, and remaining result serialization.
+ranking evaluator, the native-backed mini-batch neighborhood helper,
+GraphSAGE training on that harness, and the Phase 5 GNN-versus-MF
+comparison writer. Later: benchmark coordination and remaining result
+serialization.
 
 ## Current slice
 
@@ -27,6 +28,8 @@ Phase 5 GNN-versus-baseline comparison, and remaining result serialization.
 - `sagerec_dataset.py` reads `u.data` from a path or bytes, calls
   `graph_sampler.parse_movielens_100k` and `sagerec_prep`, and writes
   `data/processed/` artifacts plus a filled manifest.
+  `ensure_movielens_100k_processed` reuses on-disk artifacts or
+  downloads/preps 100K when they are missing.
 - `sagerec_scoring.py` defines the `PairScorer` protocol used by the
   baseline and GraphSAGE. Metric logic must not live in the model.
 - `sagerec_negatives.py` draws training negatives that do not overlap
@@ -40,17 +43,18 @@ Phase 5 GNN-versus-baseline comparison, and remaining result serialization.
   `BipartiteCSR` from local pairs and seeded multi-hop expansion via
   native `graph_sampler.sample_neighbors` (ADR-005). GraphSAGE training
   must call this helper; do not fall back to a PyG NeighborLoader.
-- `sagerec_graphsage.py` is the opened GraphSAGE training slice: PyTorch
+- `sagerec_graphsage.py` is the GraphSAGE training slice: PyTorch
   mean-aggregation layers, `PairScorer` scoring, and a seeded trainer
   that expands neighborhoods through `sagerec_minibatch`. CPU-only
   PyTorch is pinned in `requirements-train.txt`. PyG remains the intended
   production stack; this slice does not install or call PyG (no
-  NeighborLoader / SAGEConv). Tiny synthetic metrics are protocol smoke,
-  not a MovieLens 100K result.
-- Do not implement node2vec, timing charts, invented 100K GNN numbers, or
-  a Phase 5 GNN-versus-baseline quality table until those slices are
-  opened.
-- Do not add MovieLens 1M or GCN modules.
+  NeighborLoader / SAGEConv). `movielens_100k_config` is the modest
+  CPU-friendly 100K hyperparameter set (seed 7). Tiny synthetic metrics
+  are protocol smoke and must stay separate from stored 100K numbers.
+- `sagerec_compare.py` writes the Phase 5 MF-versus-GraphSAGE JSON,
+  markdown table, and SVG chart from stored result files. It does not
+  invent metrics.
+- Do not implement node2vec, timing charts, MovieLens 1M, or GCN.
 
 ## Boundaries
 
@@ -103,3 +107,7 @@ Phase 5 GNN-versus-baseline comparison, and remaining result serialization.
   stay out of the train CSR; tiny seeded synthetic smoke metrics are
   finite in `[0, 1]` and reproducible. Label those metrics as protocol
   smoke, not a MovieLens 100K result.
+- Phase 5 comparison writer: schema/protocol-match tests on fixture
+  JSON; GraphSAGE 100K wiring still requires
+  `NativeMinibatchSampler` and spies on native sampling. Do not add a
+  live 100K quality-table job to default CI.
