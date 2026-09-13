@@ -54,8 +54,10 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
   download/prep fixture tests, the Phase 3 MF ranking smoke, and the
   Phase 4 mini-batch native-sampler tests, Phase 4 GraphSAGE
   training smoke (CPU PyTorch; native `sample_neighbors` on the
-  training path), and Phase 5 comparison-writer / 100K-wiring tests
-  (fixture JSON + tiny synthetic graphs; no live 100K download).
+  training path), Phase 5 comparison-writer / 100K-wiring tests
+  (fixture JSON + tiny synthetic graphs; no live 100K download), and
+  Phase 2 sampler-timing tests (parity-before-timing + JSON schema on a
+  tiny synthetic graph; no MovieLens download, no speedup thresholds).
   PYTHONPATH includes the build directory and `python/` so `sagerec_*`
   modules import cleanly.
 

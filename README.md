@@ -12,10 +12,10 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 
 | Built | Not yet |
 | --- | --- |
-| C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | C++ vs Python timing charts and stored speedups |
-| MovieLens 100K in-memory `u.data` parser | PyG NeighborLoader / SAGEConv (intended later) |
-| Official 100K download + on-disk `data/processed/` prep | Production serving |
-| Native-backed mini-batch neighborhood helper | Multi-seed published leaderboard |
+| C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | PyG NeighborLoader / SAGEConv (intended later) |
+| MovieLens 100K in-memory `u.data` parser | Production serving |
+| Official 100K download + on-disk `data/processed/` prep | Multi-seed published leaderboard |
+| Native-backed mini-batch neighborhood helper | |
 | GraphSAGE training on native samples (CPU PyTorch) | |
 | pybind11 `graph_sampler` bindings | |
 | Python reference sampler + native parity tests | |
@@ -25,6 +25,7 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | Single-seed MovieLens 100K MF metrics in [`results/mf_movielens_100k.json`](results/mf_movielens_100k.json) | |
 | Single-seed MovieLens 100K GraphSAGE metrics in [`results/graphsage_movielens_100k.json`](results/graphsage_movielens_100k.json) | |
 | GNN-versus-MF comparison JSON, markdown table, and SVG chart | |
+| C++ vs Python reference sampler timing JSON, markdown, and SVG | |
 | Release CMake build + GitHub Actions CI | |
 
 The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF and GraphSAGE metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). Each file is a **single-seed** 100K run, not a published multi-seed leaderboard. The MF JSON is not a GraphSAGE result.
@@ -35,13 +36,13 @@ This is a systems + ML-infra portfolio piece, not a notebook demo.
 
 - **Leakage-safe graph:** the sampling CSR is built from training positives only; held-out edges never enter preprocessing, negatives, or candidate filtering.
 - **Native sampler:** neighbor sampling is real C++ CSR code with an explicit seed, not a wrapper around a graph library.
-- **Harness first:** native tests, binding tests, sampler parity, split leakage tests, download/prep fixture tests, a seeded MF metric smoke run, mini-batch native-sampler tests, and a GraphSAGE training smoke that spies on `graph_sampler` in CI.
+- **Harness first:** native tests, binding tests, sampler parity, split leakage tests, download/prep fixture tests, a seeded MF metric smoke run, mini-batch native-sampler tests, a GraphSAGE training smoke that spies on `graph_sampler` in CI, and native-versus-reference sampler timing tests.
 
 The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) calls `graph_sampler` for seeded multi-hop neighborhood expansion. GraphSAGE training in [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) uses those native samples with PyTorch mean aggregation. It does not use a PyG neighbor sampler.
 
 ## Architecture
 
-Intended system. Solid arrows are implemented. Dashed arrows lead to work that is **not implemented** (timing charts). The Phase 5 100K comparison table/chart is implemented from stored MF and GraphSAGE result files.
+Intended system. Solid arrows are implemented. The Phase 5 100K comparison table/chart is implemented from stored MF and GraphSAGE result files. The Phase 2 sampler timing chart is generated from measured native vs Python reference timings.
 
 ```mermaid
 flowchart LR
@@ -54,7 +55,7 @@ flowchart LR
     B --> H[MF baseline]
     G --> I[Recall@10 and NDCG@10]
     H --> I
-    D -.-> J[C++ vs Python timing charts]
+    D --> J[C++ vs Python timing charts]
     D --> R[Python reference sampler]
 ```
 
@@ -78,10 +79,11 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
 | GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — CPU PyTorch mean layers + `PairScorer` on native samples |
 | Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
+| Sampler timing | [`python/sagerec_sampler_benchmark.py`](python/sagerec_sampler_benchmark.py) — native vs reference `sample_neighbors` JSON/SVG |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/comparison/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/comparison/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing launchers.
 
 ## MovieLens 100K download and prep
 
@@ -128,6 +130,31 @@ Single-seed test-split numbers copied from those files (seed 7, 943 users):
 
 This is not a multi-seed leaderboard and not a production-quality claim.
 
+## Native vs Python reference sampler timing
+
+Parity is checked on the same ADR-005 without-replacement queries before any timed repetition. The committed artifacts use a deterministic synthetic bipartite graph (512 users, 1024 movies, degree 32, `k=10`, 4000 queries, seed 7) so default CI never downloads MovieLens.
+
+```bash
+PYTHONPATH=build:python python3 scripts/run_sampler_timing.py
+```
+
+Outputs:
+
+- [`results/sampler_timing.json`](results/sampler_timing.json)
+- [`results/sampler_timing.md`](results/sampler_timing.md)
+- [`results/sampler_timing.svg`](results/sampler_timing.svg)
+
+Headline latency, throughput, and speedup use the **median** of measured repetitions after warm-up. Optional `--source movielens-100k` times a train-only CSR from existing `data/processed/` artifacts and does not download.
+
+Copied from the stored JSON (Release, GNU 13.3.0, Python 3.12.3, 4-way Xeon; seed 7):
+
+| Sampler | Median seconds | Median queries/s |
+| --- | ---: | ---: |
+| native `graph_sampler` | 0.003911 | 1,022,638 |
+| Python reference | 0.434863 | 9,198 |
+
+Median speedup (reference / native): **111.177×**. This is one-machine sampler evidence, not a production latency or SOTA claim.
+
 ## Owner decisions
 
 Recorded in [`docs/decisions.md`](docs/decisions.md):
@@ -160,7 +187,7 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke). After a successful build:
+CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity). After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
@@ -169,6 +196,7 @@ PYTHONPATH=build:python python3 -m unittest python/tests/test_minibatch_native.p
 PYTHONPATH=build:python python3 -m unittest python/tests/test_graphsage_train.py -v
 PYTHONPATH=build:python python3 scripts/run_graphsage_synthetic_smoke.py
 PYTHONPATH=build:python python3 -m unittest python/tests/test_gnn_vs_mf_compare.py -v
+PYTHONPATH=build:python python3 -m unittest python/tests/test_sampler_benchmark.py -v
 ```
 
 Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
@@ -177,12 +205,13 @@ Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only 
 
 ## Honesty
 
-- No production users, no claimed latency speedups, no invented metrics.
+- No production users, no invented metrics, and no production-latency or SOTA speedup claims.
 - Tiny synthetic MF and GraphSAGE smokes are protocol verification, not MovieLens 100K evaluation.
 - A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE and not a multi-seed leaderboard.
 - A single-seed 100K GraphSAGE run is recorded under `results/graphsage_movielens_100k.json`. Neighborhoods come from `graph_sampler` via `sagerec_minibatch`, not a PyG NeighborLoader.
 - The Phase 5 comparison table/chart is generated from those two JSON files.
-- Timing charts and a PyG production training path are still ahead.
+- Native vs Python reference sampler timings are stored under `results/sampler_timing.json` (synthetic graph, median of measured repetitions). They are one-machine evidence, not a production latency or SOTA claim.
+- A PyG production training path is still ahead.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.

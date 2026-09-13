@@ -11,6 +11,11 @@ Machine-readable run summaries belong here.
 - `gnn_vs_mf_movielens_100k.json`, `.md`, and `.svg` are the Phase 5
   comparison artifacts. Values are copied from the two result files.
 
-Timing charts and stored sampler speedups are still not present.
+- `sampler_timing.json`, `.md`, and `.svg` are the Phase 2 native vs
+  Python reference neighbor-sampler timings on a deterministic synthetic
+  graph (ADR-005 without replacement). Values are measured, not invented.
+  Optional live MovieLens 100K timing is a script flag and is not the
+  committed default.
 
-Do not invent placeholder metrics. Checkpoints and bulky logs stay ignored.
+Do not invent placeholder metrics or hand-edit timings. Checkpoints and
+bulky logs stay ignored.

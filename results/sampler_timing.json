@@ -1,0 +1,117 @@
+{
+  "benchmark": "native_vs_reference_sample_neighbors",
+  "protocol_version": "sampler-timing-v1",
+  "parity_verified": true,
+  "replacement_policy": "uniform_without_replacement",
+  "adr": "ADR-005",
+  "seed": 7,
+  "graph": {
+    "kind": "synthetic_bipartite",
+    "num_users": 512,
+    "num_movies": 1024,
+    "num_nodes": 1536,
+    "num_undirected_edges": 16384,
+    "num_directed_csr_entries": 32768,
+    "requested_degree": 32,
+    "construction": "deterministic regular-ish bipartite: user u connects to movies (u * degree + offset) % num_movies"
+  },
+  "workload": {
+    "k": 10,
+    "n_queries": 4000,
+    "warmup_repetitions": 3,
+    "measured_repetitions": 9,
+    "replacement_policy": "uniform_without_replacement",
+    "query_selection": "cycle nodes with degree > k when available, else any positive-degree node; per-query seed is config.seed + index",
+    "csr_views": "reference reads offsets/neighbors captured once before timing; native uses graph_sampler.BipartiteCSR.sample_neighbors"
+  },
+  "timing_statistic": {
+    "name": "median",
+    "note": "Headline latency, throughput, and speedup use the median of measured repetitions. Mean/min/max are also stored. Workload generation and parity checks are outside timed regions."
+  },
+  "native": {
+    "implementation": "graph_sampler.BipartiteCSR.sample_neighbors",
+    "seconds": {
+      "median": 0.003911453999990044,
+      "mean": 0.0039332678888904914,
+      "min": 0.003883696000002601,
+      "max": 0.004018630999951256,
+      "repetitions": [
+        0.003911453999990044,
+        0.0039674989999980426,
+        0.003883696000002601,
+        0.004018630999951256,
+        0.0039030210000419174,
+        0.0038902759999928094,
+        0.0039206129999911354,
+        0.003891139000018029,
+        0.004013082000028589
+      ]
+    },
+    "latency_ns_per_query": {
+      "median": 977.8634999975111,
+      "mean": 983.3169722226228
+    },
+    "throughput_queries_per_s": {
+      "median": 1022637.6176251033,
+      "mean": 1016966.0732486575
+    }
+  },
+  "reference": {
+    "implementation": "sagerec_reference_sampler.sample_neighbors",
+    "seconds": {
+      "median": 0.43486325800000714,
+      "mean": 0.43524422700000465,
+      "min": 0.4340988280000033,
+      "max": 0.43867111299999806,
+      "repetitions": [
+        0.4345433900000444,
+        0.4350106089999599,
+        0.4360373420000201,
+        0.43867111299999806,
+        0.43535573000002614,
+        0.4340988280000033,
+        0.4343834829999764,
+        0.43423429000000624,
+        0.43486325800000714
+      ]
+    },
+    "latency_ns_per_query": {
+      "median": 108715.81450000178,
+      "mean": 108811.05675000117
+    },
+    "throughput_queries_per_s": {
+      "median": 9198.293777212915,
+      "mean": 9190.242516415863
+    }
+  },
+  "speedup": {
+    "statistic": "median",
+    "native_over_reference": 111.1768815384545,
+    "formula": "reference_median_seconds / native_median_seconds"
+  },
+  "build_type": "Release",
+  "compiler": {
+    "id": "GNU",
+    "path": "/usr/bin/g++",
+    "version": "13.3.0",
+    "version_line": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  },
+  "python": "3.12.3",
+  "python_implementation": "CPython",
+  "cpu": {
+    "model": "Intel(R) Xeon(R) Processor",
+    "logical_cpus": 4,
+    "machine": "x86_64"
+  },
+  "platform": {
+    "system": "Linux",
+    "release": "6.12.94+",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "git_commit": "f9d885c91d17921f7c37baceb4870db100378df1",
+  "generated_at": "2026-09-13T21:52:56.256502+00:00",
+  "note": "One-machine neighbor-sampler timing with ADR-005 without-replacement semantics. Not a production latency claim and not a quality metric.",
+  "chart_path": "results/sampler_timing.svg",
+  "markdown_path": "results/sampler_timing.md"
+}

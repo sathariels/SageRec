@@ -4,10 +4,11 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), and ADR-005
 (uniform sampling without replacement) are accepted. MovieLens 1M remains
 deferred. Phase 2 download and on-disk `processed/` prep are open for
-MovieLens 100K. Phase 2 timing charts stay closed. Phase 4 GraphSAGE training on the native-backed mini-batch harness is
-delivered. Phase 5 is delivered for the single-seed 100K GraphSAGE run
-and GNN-versus-MF comparison (not a multi-seed leaderboard). Phase 2
-timing charts remain closed.
+MovieLens 100K. Phase 2 timing charts are delivered (native vs Python
+reference sampler, stored JSON/SVG). Phase 4 GraphSAGE training on the
+native-backed mini-batch harness is delivered. Phase 5 is delivered for
+the single-seed 100K GraphSAGE run and GNN-versus-MF comparison (not a
+multi-seed leaderboard).
 
 ## Phase 1: Native foundation
 
@@ -73,9 +74,21 @@ Opened in the Phase 2 download / on-disk prep slice:
 - Fixture tests for checksum, zip layout, path ingestion, and manifest
   writes. Live download is optional and skipped in default CI.
 
-Still not started:
+Opened in the Phase 2 timing-chart slice:
 
-- Performance workloads, stored timing results, and generated charts.
+- Native vs Python reference `sample_neighbors` benchmark
+  (`python/sagerec_sampler_benchmark.py`) with ADR-005 without-replacement
+  parity required before any timed repetition.
+- Warm-up plus multiple measured repetitions; headline statistic is the
+  median. Provenance records graph size, workload, `k`, replacement
+  policy, seed, build type, compiler, Python, CPU, and speedup computed
+  from measured seconds only.
+- Thin launcher `scripts/run_sampler_timing.py` writes
+  `results/sampler_timing.json`, `.md`, and `.svg`. Default graph is
+  synthetic. `--source movielens-100k` uses existing train-only
+  `processed/` artifacts and never downloads.
+- Unittests cover parity-before-timing and the required JSON schema on a
+  tiny synthetic graph. Default CI does not time MovieLens 100K.
 
 Exit condition: selected dataset prepares reproducibly and benchmark evidence is complete.
 
@@ -169,8 +182,9 @@ Opened in the MovieLens 100K GraphSAGE quality slice:
 Still not started:
 
 - Multi-seed published leaderboard / uncertainty bars.
-- PyG production path and Phase 2 timing charts.
+- PyG production path.
 
 Exit condition: stored 100K GraphSAGE metrics with provenance, comparison
 table/chart consistent with both result files, and CI green (CTest +
-Python tests). Timing charts remain out of scope.
+Python tests). Phase 2 timing charts are delivered separately under
+`results/sampler_timing.*`.

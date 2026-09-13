@@ -37,6 +37,10 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   fixture JSON (no invented 100K numbers). Cover GraphSAGE 100K wiring:
   `movielens_100k_config` seed 7, native `NativeMinibatchSampler`
   requirement, and a native `sample_neighbors` spy on eval materialize.
-- Do not add timing-benchmark tests. Default CI must not download
-  MovieLens or run the 100K quality job.
+- Cover Phase 2 sampler timing: native/reference parity must hold
+  before any timed repetition; the timing writer emits required schema
+  fields (graph size, workload, k, replacement policy, seed, build
+  type, compiler, Python, CPU, timing statistic, speedup). Use a tiny
+  synthetic graph. Do not assert machine-specific speedups. Do not
+  download MovieLens or run the 100K quality job in default CI.
 - Keep type hints on test helpers that form part of a public-looking fixture.

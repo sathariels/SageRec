@@ -275,10 +275,15 @@ The shared protocol for this slice:
 ## Benchmark boundary
 
 The native and reference samplers consume the same query workload and satisfy the
-same output properties. The reference sampler and synthetic-graph parity tests
-exist; timed workloads, stored benchmark numbers, and charts do not. Workload
-generation occurs outside timed regions. Release native builds are mandatory for
-published timing.
+same output properties. `python/sagerec_sampler_benchmark.py` verifies
+native/reference parity on that workload, then times both implementations with
+warm-up and multiple measured repetitions. Workload generation and parity checks
+occur outside timed regions. Headline latency, throughput, and speedup use the
+**median** of measured repetitions (mean/min/max are also stored). Published
+timing uses a Release native build; the committed `results/sampler_timing.*`
+artifacts use a deterministic synthetic bipartite graph so default CI does not
+download MovieLens. An optional train-only 100K path exists as a script flag.
+Do not invent or hand-edit timings, and do not treat them as production latency.
 
 ## Dependency direction
 

@@ -31,6 +31,15 @@ Opened Phase 5 100K GraphSAGE + comparison:
   write comparison JSON, markdown table, and SVG chart. Does not invent
   metrics.
 
-Do not add MovieLens 1M or timing-benchmark scripts. The Phase 4
-mini-batch helper lives in `python/sagerec_minibatch.py`. GraphSAGE
-training lives in `python/sagerec_graphsage.py`.
+Opened Phase 2 sampler timing:
+
+- `run_sampler_timing.py` — verify native/reference `sample_neighbors`
+  parity, then time both on the same ADR-005 workload. Writes
+  `results/sampler_timing.json`, `.md`, and `.svg`. Default source is a
+  deterministic synthetic graph. `--source movielens-100k` uses existing
+  train-only `processed/` artifacts and never downloads.
+
+Do not add MovieLens 1M scripts. The Phase 4 mini-batch helper lives in
+`python/sagerec_minibatch.py`. GraphSAGE training lives in
+`python/sagerec_graphsage.py`. Sampler timing logic lives in
+`python/sagerec_sampler_benchmark.py`.
