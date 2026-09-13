@@ -15,6 +15,8 @@ GitHub Actions here must verify the native foundation without side effects.
   compiled `graph_sampler` extension and tiny synthetic graphs. Phase 5
   comparison-writer tests must use fixture JSON (or the committed MF
   result file) and must not download MovieLens or train 100K in CI.
+  Phase 2 sampler-timing tests must use the tiny synthetic graph and
+  must not time MovieLens 100K or assert machine-specific speedups.
   Default CI may install CPU-only PyTorch for GraphSAGE tests; do not add
   CUDA wheels, PyG NeighborLoader jobs, MovieLens downloads, or a live
   100K quality-table job.

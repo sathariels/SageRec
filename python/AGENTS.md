@@ -6,9 +6,9 @@ Own native-extension stubs, binding tests, the reference sampler,
 MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
 `processed/` writes, the implicit MF baseline (ADR-004), the shared
 ranking evaluator, the native-backed mini-batch neighborhood helper,
-GraphSAGE training on that harness, and the Phase 5 GNN-versus-MF
-comparison writer. Later: benchmark coordination and remaining result
-serialization.
+GraphSAGE training on that harness, the Phase 5 GNN-versus-MF
+comparison writer, and the Phase 2 native-versus-reference sampler
+timing harness.
 
 ## Current slice
 
@@ -54,7 +54,13 @@ serialization.
 - `sagerec_compare.py` writes the Phase 5 MF-versus-GraphSAGE JSON,
   markdown table, and SVG chart from stored result files. It does not
   invent metrics.
-- Do not implement node2vec, timing charts, MovieLens 1M, or GCN.
+- `sagerec_sampler_benchmark.py` times native
+  `graph_sampler.sample_neighbors` against
+  `sagerec_reference_sampler` (ADR-005). Parity is required before
+  timing. Default graphs are synthetic. Optional train-only MovieLens
+  100K timing is a script flag and must not run in default CI. Do not
+  invent or hand-edit timings.
+- Do not implement node2vec, MovieLens 1M, or GCN.
 
 ## Boundaries
 
@@ -111,3 +117,6 @@ serialization.
   JSON; GraphSAGE 100K wiring still requires
   `NativeMinibatchSampler` and spies on native sampling. Do not add a
   live 100K quality-table job to default CI.
+- Phase 2 sampler timing: parity-before-timing, required JSON schema
+  fields, and a tiny synthetic smoke. Do not assert machine-specific
+  speedups. Do not download MovieLens in default CI.
