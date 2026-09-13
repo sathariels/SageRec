@@ -366,6 +366,33 @@ def compiler_version_string(compiler_path: str | None) -> str | None:
     return first[0] if first else None
 
 
+def infer_compiler_id(compiler_path: str | None, version_line: str | None) -> str:
+    name = Path(compiler_path).name.lower() if compiler_path else ""
+    blob = f"{name} {version_line or ''}".lower()
+    if "clang" in blob:
+        return "Clang"
+    if "g++" in blob or name.startswith("gcc") or "gcc" in blob:
+        return "GNU"
+    return "unknown"
+
+
+def compiler_dumpversion(compiler_path: str | None) -> str | None:
+    if not compiler_path:
+        return None
+    for flag in ("-dumpfullversion", "-dumpversion"):
+        try:
+            value = subprocess.check_output(
+                [compiler_path, flag],
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        if value:
+            return value
+    return None
+
+
 def cpu_info() -> dict[str, Any]:
     model: str | None = None
     cpuinfo = Path("/proc/cpuinfo")
@@ -391,6 +418,12 @@ def collect_environment(
     cmake = parse_cmake_cache(build_dir)
     compiler_path = cmake.get("compiler_path")
     version_line = compiler_version_string(compiler_path)
+    compiler_id = cmake.get("compiler_id") or infer_compiler_id(
+        compiler_path, version_line
+    )
+    compiler_version = cmake.get("compiler_version") or compiler_dumpversion(
+        compiler_path
+    )
     return {
         "git_commit": git_commit(repo_root),
         "generated_at": generated_at or datetime.now(timezone.utc).isoformat(),
@@ -398,9 +431,9 @@ def collect_environment(
         "python_implementation": platform.python_implementation(),
         "build_type": cmake.get("build_type") or "unknown",
         "compiler": {
-            "id": cmake.get("compiler_id") or "unknown",
+            "id": compiler_id,
             "path": compiler_path or "unknown",
-            "version": cmake.get("compiler_version") or "unknown",
+            "version": compiler_version or "unknown",
             "version_line": version_line,
         },
         "cpu": cpu_info(),
@@ -675,7 +708,13 @@ def render_timing_markdown(payload: Mapping[str, Any]) -> str:
         "measured repetitions\n"
         f"- Build: `{payload['build_type']}`; compiler "
         f"`{payload['compiler'].get('id', 'unknown')} "
-        f"{payload['compiler'].get('version', '')}`\n"
+        f"{payload['compiler'].get('version', '')}`"
+        + (
+            f" ({payload['compiler']['version_line']})"
+            if payload["compiler"].get("version_line")
+            else ""
+        )
+        + "\n"
         f"- Python: {payload['python']}; CPU: {payload['cpu'].get('model')}\n"
         "\n"
         "| Sampler | Median seconds | Mean seconds | Median ns/query | "
@@ -699,12 +738,12 @@ def render_timing_markdown(payload: Mapping[str, Any]) -> str:
 
 
 def render_timing_svg(payload: Mapping[str, Any]) -> str:
-    """Bar chart of median seconds for native vs reference (no extra deps)."""
-    native_s = float(payload["native"]["seconds"]["median"])
-    ref_s = float(payload["reference"]["seconds"]["median"])
+    """Bar chart of median throughput for native vs reference (no extra deps)."""
+    native_qps = float(payload["native"]["throughput_queries_per_s"]["median"])
+    ref_qps = float(payload["reference"]["throughput_queries_per_s"]["median"])
     speedup = float(payload["speedup"]["native_over_reference"])
-    values = [native_s, ref_s]
-    ymax = max(values + [1e-9]) * 1.35
+    values = [native_qps, ref_qps]
+    ymax = max(values + [1.0]) * 1.35
     width, height = 720, 420
     left, right, top, bottom = 80, 30, 56, 70
     plot_w = width - left - right
@@ -716,6 +755,11 @@ def render_timing_svg(payload: Mapping[str, Any]) -> str:
     def x_for(index: int) -> float:
         center = left + plot_w * ((index + 0.5) / len(values))
         return center - bar_w / 2
+
+    def format_qps(value: float) -> str:
+        if value >= 100:
+            return f"{value:,.0f}"
+        return f"{value:.1f}"
 
     bars: list[str] = []
     for index, (value, label, color) in enumerate(zip(values, labels, colors)):
@@ -729,7 +773,7 @@ def render_timing_svg(payload: Mapping[str, Any]) -> str:
         bars.append(
             f'<text x="{x + bar_w / 2:.1f}" y="{y - 8:.1f}" '
             f'text-anchor="middle" font-size="12" font-family="sans-serif">'
-            f"{value:.4f}s</text>"
+            f"{format_qps(value)} q/s</text>"
         )
         bars.append(
             f'<text x="{x + bar_w / 2:.1f}" y="{height - 28:.1f}" '
@@ -745,7 +789,7 @@ def render_timing_svg(payload: Mapping[str, Any]) -> str:
     title = (
         '<text x="360" y="28" text-anchor="middle" font-size="16" '
         'font-family="sans-serif">'
-        "Neighbor-sampler median seconds "
+        "Neighbor-sampler median throughput "
         f"(seed {payload['seed']}, k={payload['workload']['k']})</text>"
     )
     subtitle = (
@@ -758,7 +802,7 @@ def render_timing_svg(payload: Mapping[str, Any]) -> str:
         f'<text x="18" y="{top + plot_h / 2:.1f}" text-anchor="middle" '
         f'font-size="12" font-family="sans-serif" '
         f'transform="rotate(-90 18 {top + plot_h / 2:.1f})">'
-        "median seconds / workload</text>"
+        "median queries / s</text>"
     )
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" '

@@ -196,15 +196,25 @@ class TimingSchemaTests(unittest.TestCase):
             self.assertIn("Python reference", markdown)
             svg = artifacts.chart_path.read_text(encoding="utf-8")
             self.assertIn("<svg", svg)
-            self.assertIn("0.0500s", svg)
-            self.assertIn("0.5000s", svg)
+            self.assertIn("320 q/s", svg)
+            self.assertIn("32.0 q/s", svg)
             self.assertIn("native graph_sampler", svg)
             self.assertIn("Python reference", svg)
+            self.assertIn("median queries / s", svg)
 
     def test_validate_rejects_missing_fields(self) -> None:
         with self.assertRaises(bench.BenchmarkError) as ctx:
             bench.validate_timing_payload({"benchmark": bench.BENCHMARK_NAME})
         self.assertIn("missing required keys", str(ctx.exception))
+
+    def test_compiler_id_inferred_from_gxx(self) -> None:
+        self.assertEqual(bench.infer_compiler_id("/usr/bin/g++", None), "GNU")
+        self.assertEqual(
+            bench.infer_compiler_id(
+                None, "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+            ),
+            "GNU",
+        )
 
 
 class EndToEndSmokeTests(unittest.TestCase):

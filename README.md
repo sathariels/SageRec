@@ -144,7 +144,16 @@ Outputs:
 - [`results/sampler_timing.md`](results/sampler_timing.md)
 - [`results/sampler_timing.svg`](results/sampler_timing.svg)
 
-Headline latency, throughput, and speedup use the **median** of measured repetitions after warm-up. Optional `--source movielens-100k` times a train-only CSR from existing `data/processed/` artifacts and does not download. These numbers are one-machine sampler evidence, not a production latency claim.
+Headline latency, throughput, and speedup use the **median** of measured repetitions after warm-up. Optional `--source movielens-100k` times a train-only CSR from existing `data/processed/` artifacts and does not download.
+
+Copied from the stored JSON (Release, GNU 13.3.0, Python 3.12.3, 4-way Xeon; seed 7):
+
+| Sampler | Median seconds | Median queries/s |
+| --- | ---: | ---: |
+| native `graph_sampler` | 0.003911 | 1,022,638 |
+| Python reference | 0.434863 | 9,198 |
+
+Median speedup (reference / native): **111.177×**. This is one-machine sampler evidence, not a production latency or SOTA claim.
 
 ## Owner decisions
 
