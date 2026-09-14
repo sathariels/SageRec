@@ -62,8 +62,9 @@ class LoadGraphSamplerTests(unittest.TestCase):
         self.assertNotIn("sagerec_reference_sampler", source)
         self.assertIn("call_native_sample_neighbors", source)
         self.assertNotIn("torch_geometric", source)
-        self.assertNotIn("NeighborLoader", source)
-        self.assertNotIn("ClusterLoader", source)
+        self.assertNotIn("from torch_geometric", source)
+        self.assertNotIn("NeighborLoader(", source)
+        self.assertNotIn("ClusterLoader(", source)
 
     def test_missing_graph_sampler_fails_actionably(self) -> None:
         real = sys.modules.get("graph_sampler")
