@@ -11,14 +11,15 @@ and an agent-friendly repository.
 
 Phase 1 native foundation is verified. ADR-001 (MovieLens 100K), ADR-002
 (GraphSAGE), ADR-003 (per-user chronological leave-one-out), ADR-004
-(matrix factorization), and ADR-005 (uniform sampling without replacement)
-are accepted; MovieLens 1M is deferred. The verified slice includes the C++
+(matrix factorization), ADR-005 (uniform sampling without replacement),
+and ADR-006 (PyG SAGEConv on native `graph_sampler` neighborhoods) are
+accepted; MovieLens 1M is deferred. The verified slice includes the C++
 CSR graph, seeded neighbor sampler, MovieLens 100K `u.data` parser,
 `graph_sampler` bindings, a naive Python reference sampler with native
 parity tests, ADR-003 leave-one-out prep, MovieLens 100K download and
 on-disk `processed/` writes, an implicit MF baseline, a shared ranking
 evaluator, a native-backed mini-batch neighborhood helper, GraphSAGE
-training on that harness, and CI.
+training on that harness (PyG `SAGEConv`, native neighborhoods), and CI.
 
 Phase 2 download + on-disk `processed/` prep is open for MovieLens 100K.
 Phase 2 timing charts are delivered: native `graph_sampler` versus the
@@ -30,9 +31,10 @@ native mini-batch harness (the Python training data path must call
 `graph_sampler` / `sagerec_minibatch`; do not silently use a PyG
 NeighborLoader). Phase 5 is delivered for the single-seed MovieLens 100K
 GraphSAGE quality run and the GNN-versus-MF comparison table/chart under
-`results/`. Tiny synthetic GraphSAGE metrics remain protocol smoke and
-must stay separate from the stored 100K numbers. Do not add MovieLens 1M
-or GCN paths. Do not invent metrics or hand-edit timings.
+`results/`. Phase 6 is delivered for PyG `SAGEConv` message passing still
+fed by native sampling. Tiny synthetic GraphSAGE metrics remain protocol
+smoke and must stay separate from the stored 100K numbers. Do not add
+MovieLens 1M or GCN paths. Do not invent metrics or hand-edit timings.
 
 ## Read order
 
@@ -59,6 +61,8 @@ Accepted and recorded in `docs/decisions.md`:
 - ADR-005: Uniform sampling without replacement (native and Python reference
   samplers must keep this contract; replacement policy changes need a
   superseding ADR).
+- ADR-006: PyG `SAGEConv` on native `graph_sampler` neighborhoods (not a PyG
+  NeighborLoader).
 
 Do not add node2vec unless a superseding ADR accepts it.
 

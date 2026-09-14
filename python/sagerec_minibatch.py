@@ -4,9 +4,10 @@ Builds a train-only ``graph_sampler.BipartiteCSR`` from local user-movie
 pairs and expands seeded multi-hop neighborhoods by calling native
 ``BipartiteCSR.sample_neighbors`` (ADR-005: uniform without replacement).
 
-GraphSAGE training (`sagerec_graphsage`) consumes this helper. This module
-does not implement layers or ranking metrics and must not fall back to a
-PyG NeighborLoader. Callers must pass training positives only; held-out
+GraphSAGE training (`sagerec_graphsage`) consumes this helper and converts
+native hops into PyG ``SAGEConv`` tensors (ADR-006). This module does not
+implement layers or ranking metrics and must not fall back to a PyG
+NeighborLoader. Callers must pass training positives only; held-out
 edges must never enter the sampling graph.
 """
 

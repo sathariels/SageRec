@@ -68,16 +68,21 @@ def _tiny_config(seed: int = 7) -> graphsage.GraphSAGEConfig:
 
 
 class GraphSAGEModuleContractTests(unittest.TestCase):
-    def test_module_uses_native_minibatch_not_pyg_loader(self) -> None:
+    def test_module_uses_sageconv_and_native_minibatch_not_pyg_loader(self) -> None:
         source = Path(graphsage.__file__).read_text(encoding="utf-8")
         self.assertIn("sagerec_minibatch", source)
         self.assertIn("NativeMinibatchSampler", source)
+        self.assertIn("neighborhood_hop_to_edge_index", source)
+        self.assertIn("SAGEConv", source)
+        self.assertIn("from torch_geometric.nn import SAGEConv", source)
         self.assertTrue(callable(minibatch.call_native_sample_neighbors))
-        self.assertNotIn("import torch_geometric", source)
-        self.assertNotIn("from torch_geometric", source)
         self.assertNotIn("torch_geometric.loader", source)
+        self.assertNotIn("NeighborLoader(", source)
+        self.assertNotIn("ClusterLoader(", source)
+        self.assertNotIn("NeighborSampler(", source)
         self.assertNotIn("import sagerec_reference_sampler", source)
         self.assertNotIn("from sagerec_reference_sampler", source)
+        self.assertEqual(graphsage.SAGEConv.__name__, "SAGEConv")
 
     def test_invalid_config_fails(self) -> None:
         with self.assertRaises(ValueError):
@@ -90,6 +95,30 @@ class GraphSAGEModuleContractTests(unittest.TestCase):
             graphsage.GraphSAGEConfig(optimizer="rmsprop")
         with self.assertRaises(ValueError):
             graphsage.fit_graphsage([], num_users=1, num_items=1)
+
+
+class NativeHopAdapterTests(unittest.TestCase):
+    def test_edge_index_is_neighbor_to_source_and_last_wins(self) -> None:
+        sources = [10, 11, 10]
+        neighbors = [(1, 2), (3,), (4,)]
+        index = {10: 0, 11: 1, 1: 2, 2: 3, 3: 4, 4: 5}
+        edge_index = graphsage.neighborhood_hop_to_edge_index(sources, neighbors, index)
+        self.assertEqual(tuple(edge_index.shape), (2, 2))
+        # Last sample for node 10 is (4,); node 11 keeps (3,).
+        pairs = set(zip(edge_index[0].tolist(), edge_index[1].tolist()))
+        self.assertEqual(pairs, {(5, 0), (4, 1)})
+
+    def test_empty_neighbors_yield_empty_edge_index(self) -> None:
+        edge_index = graphsage.neighborhood_hop_to_edge_index([7], [()], {7: 0})
+        self.assertEqual(tuple(edge_index.shape), (2, 0))
+        self.assertEqual(edge_index.dtype, graphsage.torch.long)
+
+    def test_length_mismatch_and_missing_index_fail(self) -> None:
+        with self.assertRaises(ValueError):
+            graphsage.neighborhood_hop_to_edge_index([1], [(), ()], {1: 0})
+        with self.assertRaises(ValueError) as ctx:
+            graphsage.neighborhood_hop_to_edge_index([1], [(2,)], {1: 0})
+        self.assertIn("neighbor", str(ctx.exception))
 
 
 class GraphSAGETrainingTests(unittest.TestCase):
@@ -117,6 +146,54 @@ class GraphSAGETrainingTests(unittest.TestCase):
             self.assertGreaterEqual(seed, 0)
         self.assertIsInstance(model, PairScorer)
         self.assertIsInstance(model.sampler, minibatch.NativeMinibatchSampler)
+        self.assertGreaterEqual(len(model.convs), 1)
+        for conv in model.convs:
+            self.assertIsInstance(conv, graphsage.SAGEConv)
+
+    def test_training_does_not_construct_pyg_neighbor_loader(self) -> None:
+        split = _synthetic_split()
+        config = _tiny_config(seed=5)
+        with mock.patch("torch_geometric.loader.NeighborLoader") as neighbor_loader:
+            with mock.patch("torch_geometric.loader.ClusterLoader") as cluster_loader:
+                neighbor_loader.side_effect = AssertionError(
+                    "NeighborLoader must not be used on the primary path"
+                )
+                cluster_loader.side_effect = AssertionError(
+                    "ClusterLoader must not be used on the primary path"
+                )
+                with mock.patch.object(
+                    minibatch,
+                    "call_native_sample_neighbors",
+                    wraps=minibatch.call_native_sample_neighbors,
+                ) as native:
+                    model = graphsage.train_graphsage(split, config)
+        neighbor_loader.assert_not_called()
+        cluster_loader.assert_not_called()
+        self.assertGreaterEqual(native.call_count, 1)
+        self.assertIsInstance(model.sampler, minibatch.NativeMinibatchSampler)
+        self.assertIsInstance(model.convs[0], graphsage.SAGEConv)
+
+    def test_encode_uses_native_samples_then_edge_index_adapter(self) -> None:
+        split = _synthetic_split()
+        sampler = minibatch.NativeMinibatchSampler.from_train_pairs(
+            split.num_users, split.num_movies, split.train_positive_pairs()
+        )
+        model = graphsage.GraphSAGERecommender(sampler, _tiny_config(seed=3))
+        with mock.patch.object(
+            minibatch,
+            "call_native_sample_neighbors",
+            wraps=minibatch.call_native_sample_neighbors,
+        ) as native:
+            with mock.patch.object(
+                graphsage,
+                "neighborhood_hop_to_edge_index",
+                wraps=graphsage.neighborhood_hop_to_edge_index,
+            ) as adapter:
+                encoded = model.encode_nodes([0, 1], sample_seed=11)
+        self.assertGreaterEqual(native.call_count, 1)
+        self.assertGreaterEqual(adapter.call_count, 1)
+        self.assertEqual(encoded.size(0), 2)
+        self.assertEqual(encoded.size(1), model.config.hidden_dim)
 
     def test_score_pairs_calls_native_sampler(self) -> None:
         split = _synthetic_split()

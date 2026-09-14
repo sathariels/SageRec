@@ -42,7 +42,8 @@ def _parse_args() -> argparse.Namespace:
         description=(
             "Train native-backed GraphSAGE on prepared MovieLens 100K and "
             "write a provenance JSON. Neighborhoods come from "
-            "sagerec_minibatch / graph_sampler, not a PyG NeighborLoader."
+            "sagerec_minibatch / graph_sampler, not a PyG NeighborLoader. "
+            "Message passing uses PyG SAGEConv (ADR-006)."
         )
     )
     parser.add_argument(

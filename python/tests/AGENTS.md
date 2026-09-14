@@ -33,6 +33,9 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   not used, `PairScorer` + `evaluate_ranking` smoke metrics are finite
   in `[0, 1]` and reproducible, and held-out edges stay out of the train
   CSR. Label those metrics as protocol smoke, not MovieLens 100K.
+- Cover Phase 6: `SAGEConv` is the conv stack; native hops convert to
+  `edge_index`; `NeighborLoader` / `ClusterLoader` are absent from the
+  primary training path (source inspect + runtime assert).
 - Cover Phase 5 comparison-writer schema and protocol-match checks on
   fixture JSON (no invented 100K numbers). Cover GraphSAGE 100K wiring:
   `movielens_100k_config` seed 7, native `NativeMinibatchSampler`

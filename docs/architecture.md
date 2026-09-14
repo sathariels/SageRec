@@ -166,7 +166,8 @@ The Phase 4 harness (`python/sagerec_minibatch.py`) builds a train-only
 `BipartiteCSR` from local pairs and expands seeded multi-hop neighborhoods by
 calling native `sample_neighbors`. GraphSAGE training (`python/sagerec_graphsage.py`)
 consumes those batches, including the Phase 5 MovieLens 100K quality run;
-the helper itself does not own layers or metrics.
+the helper itself does not own layers or metrics. Phase 6 converts each native
+hop into a PyG `edge_index` and applies `SAGEConv`.
 Current one-hop behavior:
 
 | Topic | Implementation contract |
@@ -200,8 +201,8 @@ sampler. Public surface:
 
 The helper must not fall back to `sagerec_reference_sampler` or a PyG
 neighbor sampler. GraphSAGE training converts native `NeighborhoodBatch`
-data into PyTorch tensors for in-repo mean aggregation. It does not use a
-PyG NeighborLoader.
+hops into PyG `edge_index` tensors and applies `SAGEConv` (ADR-006). It
+does not use a PyG NeighborLoader.
 
 ## Training flow
 
@@ -210,10 +211,10 @@ PyG NeighborLoader.
 3. Generate valid negative pairs while excluding known positives.
 4. Expand required neighborhoods through the native sampler
    (`sagerec_minibatch.NativeMinibatchSampler`).
-5. Convert sampled neighborhoods into PyTorch tensors (not PyG
-   `NeighborLoader` / `SAGEConv` in this slice).
+5. Convert sampled neighborhoods into PyG `edge_index` tensors (not a PyG
+   `NeighborLoader`; sampling already happened in native code).
 6. Compute positive and negative recommendation scores with GraphSAGE
-   mean aggregation and optimize logistic ranking loss
+   `SAGEConv` mean aggregation and optimize logistic ranking loss
    (`python/sagerec_graphsage.py`).
 7. Evaluate checkpoints with the fixed ranking protocol via
    `PairScorer` + `sagerec_metrics.evaluate_ranking`. Tiny synthetic
@@ -223,11 +224,13 @@ PyG NeighborLoader.
    `python/sagerec_compare.py` (same split, eligible users, candidate
    protocol, and metrics).
 
-The GNN family is GraphSAGE (ADR-002). PyTorch Geometric remains the
-intended production training stack; this slice trains with CPU PyTorch
-on native samples. Ranking on 100K materializes one native-sampled
-embedding per graph node at the experiment seed, then scores pairs with
-inner products. Training still samples independently per mini-batch.
+The GNN family is GraphSAGE (ADR-002). Production message passing is PyG
+`SAGEConv` (ADR-006) on CPU, still fed by native samples. Ranking on 100K
+materializes one native-sampled embedding per graph node at the experiment
+seed, then scores pairs with inner products. Training still samples
+independently per mini-batch. Stored `results/graphsage_movielens_100k.json`
+metrics are the Phase 5 in-repo-mean-layer run; do not retcon them as a
+SAGEConv 100K rerun.
 
 ## Baseline (ADR-004)
 
@@ -290,4 +293,5 @@ Do not invent or hand-edit timings, and do not treat them as production latency.
 The native graph core must not depend on Python, PyTorch, or PyTorch Geometric.
 Bindings depend on the native core. Python orchestration may depend on bindings,
 but model and evaluation logic should use a narrow sampler interface so tests can
-substitute a deterministic fake.
+substitute a deterministic fake. PyG is a Python-side conv-stack dependency
+only; it must not become the neighborhood source.
