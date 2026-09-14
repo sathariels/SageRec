@@ -7,7 +7,8 @@ Machine-readable run summaries belong here.
   result and not a published leaderboard.
 - `graphsage_movielens_100k.json` is the matching single-seed GraphSAGE run
   (seed 7, native `sagerec_minibatch` neighborhoods). Not a multi-seed
-  leaderboard.
+  leaderboard. Those metrics were measured with the Phase 5 in-repo mean
+  layers; do not retcon them as a Phase 6 SAGEConv rerun.
 - `gnn_vs_mf_movielens_100k.json`, `.md`, and `.svg` are the Phase 5
   comparison artifacts. Values are copied from the two result files.
 

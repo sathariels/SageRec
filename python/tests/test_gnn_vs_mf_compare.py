@@ -271,8 +271,11 @@ class GraphSAGE100kWiringTests(unittest.TestCase):
         self.assertNotIn("NeighborLoader(", script)
         self.assertNotIn("SAGEConv(", script)
         self.assertIn("NativeMinibatchSampler", source)
-        self.assertNotIn("import torch_geometric", source)
-        self.assertNotIn("from torch_geometric", source)
+        self.assertIn("from torch_geometric.nn import SAGEConv", source)
+        self.assertIn("SAGEConv", source)
+        self.assertNotIn("torch_geometric.loader", source)
+        self.assertNotIn("NeighborLoader(", source)
+        self.assertNotIn("ClusterLoader(", source)
 
     def test_result_payload_schema_mirrors_mf_and_labels_single_seed(self) -> None:
         split = _synthetic_split()
@@ -317,6 +320,9 @@ class GraphSAGE100kWiringTests(unittest.TestCase):
         self.assertIn("not a multi-seed leaderboard", payload["note"].lower())
         self.assertNotIn("torch_geometric", payload["sampler"])
         self.assertIn("no PyG", payload["sampler"])
+        self.assertIn("SAGEConv", payload["conv_stack"])
+        self.assertIn("NeighborLoader", payload["conv_stack"])
+        self.assertIsInstance(model.convs[0], graphsage.SAGEConv)
         for key in compare.REQUIRED_RESULT_KEYS:
             self.assertIn(key, payload)
 

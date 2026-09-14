@@ -1,15 +1,15 @@
-"""GraphSAGE training on the native mini-batch harness (Phase 4 / Phase 5).
+"""GraphSAGE training on the native mini-batch harness (Phase 4–6).
 
 Neighborhood expansion always goes through ``sagerec_minibatch`` /
 ``graph_sampler.BipartiteCSR.sample_neighbors`` (ADR-005). This module does
-not import or call a PyG ``NeighborLoader`` / neighbor sampler.
+not import or call a PyG ``NeighborLoader``, ``ClusterLoader``, or other PyG
+sampler.
 
-Layers are GraphSAGE-style mean aggregation implemented in PyTorch. PyTorch
-Geometric remains the intended production training stack for later SAGEConv
-/ tensor conversion; this slice is a native-backed PyTorch trainer, not a
-NumPy stand-in. MovieLens 100K quality numbers come from
-``movielens_100k_config`` + the 100K train/eval script, never from the tiny
-synthetic protocol smoke.
+Message passing uses PyTorch Geometric ``SAGEConv`` (ADR-006) on tensors
+built from native ``NeighborhoodBatch`` hops. Pair scoring stays in this
+module. MovieLens 100K quality numbers come from ``movielens_100k_config``
++ the 100K train/eval script, never from the tiny synthetic protocol smoke.
+Stored 100K JSON under ``results/`` is not retconned here.
 """
 
 from __future__ import annotations
@@ -31,6 +31,17 @@ _TORCH_IMPORT_ERROR = (
     "--index-url https://download.pytorch.org/whl/cpu "
     "(see python/requirements-train.txt). Native C++ stays free of PyTorch."
 )
+_PYG_IMPORT_ERROR = (
+    "PyTorch Geometric is required for GraphSAGE SAGEConv layers. Install "
+    "the CPU-friendly package after CPU PyTorch, for example: "
+    "python3 -m pip install torch==2.6.0 "
+    "--index-url https://download.pytorch.org/whl/cpu && "
+    "python3 -m pip install torch-geometric==2.6.1 "
+    "(see python/requirements-train.txt). Mean SAGEConv does not need "
+    "torch-scatter / torch-sparse / pyg-lib. Native C++ stays free of "
+    "PyTorch and PyG. Neighborhoods still come from graph_sampler, not a "
+    "PyG NeighborLoader."
+)
 
 
 def require_torch() -> Any:
@@ -42,7 +53,19 @@ def require_torch() -> Any:
     return torch
 
 
+def require_sageconv() -> tuple[Any, str]:
+    """Import PyG SAGEConv or fail with an actionable install hint."""
+    try:
+        import torch_geometric
+        from torch_geometric.nn import SAGEConv
+    except ImportError as exc:
+        raise ImportError(_PYG_IMPORT_ERROR) from exc
+    version = getattr(torch_geometric, "__version__", "unknown")
+    return SAGEConv, str(version)
+
+
 torch = require_torch()
+SAGEConv, TORCH_GEOMETRIC_VERSION = require_sageconv()
 
 
 def _require_int(value: Any, field: str) -> int:
@@ -207,54 +230,51 @@ def graphsage_training_seed_notes(seed: int) -> dict[str, int | str]:
     }
 
 
-def _mean_neighbor_hidden(
-    hidden: torch.Tensor,
+def neighborhood_hop_to_edge_index(
+    sources: Sequence[int],
     neighbor_lists: Sequence[Sequence[int]],
     index: Mapping[int, int],
+    *,
+    device: torch.device | str | None = None,
 ) -> torch.Tensor:
-    """Mean-pool neighbor rows; isolated sources stay the zero vector."""
-    n_sources = len(neighbor_lists)
-    dim = hidden.size(-1)
-    if n_sources == 0:
-        return hidden.new_zeros((0, dim))
-    rows: list[int] = []
-    cols: list[int] = []
-    for row, neighbors in enumerate(neighbor_lists):
-        for node in neighbors:
-            rows.append(row)
-            cols.append(index[int(node)])
-    out = hidden.new_zeros((n_sources, dim))
-    if not rows:
-        return out
-    row_idx = torch.tensor(rows, dtype=torch.long, device=hidden.device)
-    col_idx = torch.tensor(cols, dtype=torch.long, device=hidden.device)
-    out.index_add_(0, row_idx, hidden[col_idx])
-    counts = torch.zeros(n_sources, dtype=hidden.dtype, device=hidden.device)
-    counts.index_add_(
-        0,
-        row_idx,
-        torch.ones(len(rows), dtype=hidden.dtype, device=hidden.device),
-    )
-    return out / counts.clamp(min=1.0).unsqueeze(-1)
+    """Convert one native hop into a PyG ``edge_index`` (2, E).
 
-
-class SAGEMeanLayer(torch.nn.Module):
-    """One GraphSAGE mean layer: W · concat(self, mean(neighbors)).
-
-    Intermediate layers use ReLU. The last layer stays linear so ranking
-    scores are not forced through a non-negative squash.
+    Message-passing convention: ``edge_index[0]`` is the neighbor (message
+    sender) and ``edge_index[1]`` is the frontier node being updated. If a
+    node appears more than once in ``sources``, the last occurrence's
+    neighbor list is kept (same last-wins rule as the former in-repo mean
+    encoder). This adapter does not sample; callers must pass ADR-005 lists
+    from ``NativeMinibatchSampler``.
     """
-
-    def __init__(self, in_dim: int, out_dim: int, *, activate: bool) -> None:
-        super().__init__()
-        self.linear = torch.nn.Linear(in_dim * 2, out_dim)
-        self.activate = activate
-
-    def forward(self, self_h: torch.Tensor, neigh_h: torch.Tensor) -> torch.Tensor:
-        hidden = self.linear(torch.cat([self_h, neigh_h], dim=-1))
-        if self.activate:
-            return torch.relu(hidden)
-        return hidden
+    if len(sources) != len(neighbor_lists):
+        raise ValueError(
+            "sources and neighbor_lists must have the same length, "
+            f"got {len(sources)} and {len(neighbor_lists)}"
+        )
+    last_neighbors: dict[int, Sequence[int]] = {}
+    for source, neighbors in zip(sources, neighbor_lists):
+        last_neighbors[int(source)] = neighbors
+    src_idx: list[int] = []
+    dst_idx: list[int] = []
+    for source, neighbors in last_neighbors.items():
+        try:
+            dst = index[source]
+        except KeyError as exc:
+            raise ValueError(
+                f"source node {source} is missing from the node index"
+            ) from exc
+        for neighbor in neighbors:
+            node = int(neighbor)
+            try:
+                src_idx.append(index[node])
+            except KeyError as exc:
+                raise ValueError(
+                    f"neighbor node {node} is missing from the node index"
+                ) from exc
+            dst_idx.append(dst)
+    if not src_idx:
+        return torch.empty((2, 0), dtype=torch.long, device=device)
+    return torch.tensor([src_idx, dst_idx], dtype=torch.long, device=device)
 
 
 class GraphSAGERecommender(torch.nn.Module):
@@ -281,12 +301,8 @@ class GraphSAGERecommender(torch.nn.Module):
         torch.nn.init.normal_(self.embedding.weight, mean=0.0, std=config.init_std)
         dims = [config.embedding_dim]
         dims.extend([config.hidden_dim] * config.n_layers)
-        self.layers = torch.nn.ModuleList(
-            SAGEMeanLayer(
-                dims[index],
-                dims[index + 1],
-                activate=index < config.n_layers - 1,
-            )
+        self.convs = torch.nn.ModuleList(
+            SAGEConv(dims[index], dims[index + 1], aggr="mean")
             for index in range(config.n_layers)
         )
         self._eval_user: torch.Tensor | None = None
@@ -312,7 +328,7 @@ class GraphSAGERecommender(torch.nn.Module):
         return self.sampler.sample_multihop(seed_nodes, self.config.fanouts, seed)
 
     def encode_nodes(self, seed_nodes: Sequence[int], sample_seed: int) -> torch.Tensor:
-        """Encode global node IDs with GraphSAGE mean over native samples."""
+        """Encode global node IDs with SAGEConv over native samples."""
         nodes = [int(node) for node in seed_nodes]
         if not nodes:
             out_dim = self.config.hidden_dim
@@ -327,30 +343,27 @@ class GraphSAGERecommender(torch.nn.Module):
                 involved.update(int(node) for node in neighbors)
         ordered = sorted(involved)
         index = {node: position for position, node in enumerate(ordered)}
-        hidden = self.embedding(
-            torch.tensor(ordered, dtype=torch.long, device=self.embedding.weight.device)
-        )
+        device = self.embedding.weight.device
+        hidden = self.embedding(torch.tensor(ordered, dtype=torch.long, device=device))
 
         for layer_index, hop in enumerate(reversed(range(len(batch.fanouts)))):
             sources = batch.sources[hop]
             neighbor_lists = batch.hops[hop]
             if not sources:
                 continue
-            source_positions = [index[int(node)] for node in sources]
-            self_h = hidden[source_positions]
-            neigh_h = _mean_neighbor_hidden(hidden, neighbor_lists, index)
-            updated = self.layers[layer_index](self_h, neigh_h)
+            edge_index = neighborhood_hop_to_edge_index(
+                sources, neighbor_lists, index, device=device
+            )
+            updated = self.convs[layer_index](hidden, edge_index)
+            if layer_index < self.config.n_layers - 1:
+                updated = torch.relu(updated)
             if updated.size(-1) != hidden.size(-1):
                 next_hidden = hidden.new_zeros(hidden.size(0), updated.size(-1))
             else:
                 next_hidden = hidden.clone()
-            # Last occurrence wins if a node appears twice in this frontier.
-            last_row: dict[int, int] = {}
-            for row, position in enumerate(source_positions):
-                last_row[position] = row
-            write_positions = list(last_row.keys())
-            write_rows = [last_row[position] for position in write_positions]
-            next_hidden[write_positions] = updated[write_rows]
+            # Unique frontier nodes; last-wins on edges happens in the adapter.
+            write_positions = list(dict.fromkeys(index[int(node)] for node in sources))
+            next_hidden[write_positions] = updated[write_positions]
             hidden = next_hidden
 
         seed_positions = [index[node] for node in nodes]
@@ -636,6 +649,11 @@ def graphsage_result_payload(
             "graph_sampler.BipartiteCSR.sample_neighbors via "
             "sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)"
         ),
+        "conv_stack": (
+            "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch "
+            "edge_index; not a PyG NeighborLoader"
+        ),
+        "torch_geometric": TORCH_GEOMETRIC_VERSION,
         "metrics": {
             "k": report.k,
             "split": report.split,
@@ -654,7 +672,8 @@ def graphsage_result_payload(
         "note": (
             "Single-seed MovieLens 100K GraphSAGE run on the ADR-003 split. "
             "Neighborhoods come from native sagerec_minibatch / graph_sampler; "
-            "not a PyG NeighborLoader run and not a multi-seed leaderboard. "
+            "message passing is PyG SAGEConv (ADR-006). "
+            "This is not a PyG NeighborLoader run and not a multi-seed leaderboard. "
             f"Uses {config.n_epochs} epoch(s); fairness versus MF is the shared "
             "eval protocol, not identical wall-clock."
         ),

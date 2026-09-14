@@ -25,8 +25,10 @@ Opened Phase 4 GraphSAGE synthetic smoke:
 Opened Phase 5 100K GraphSAGE + comparison:
 
 - `run_graphsage_movielens_100k.py` — download/prep if needed, train
-  GraphSAGE on the native mini-batch harness (seed 7), evaluate with
-  shared `PairScorer` metrics, write `results/graphsage_movielens_100k.json`.
+  GraphSAGE on the native mini-batch harness (seed 7) with PyG SAGEConv,
+  evaluate with shared `PairScorer` metrics, write
+  `results/graphsage_movielens_100k.json`. Do not retcon stored Phase 5
+  numbers without a measured rerun.
 - `write_gnn_vs_mf_comparison.py` — read stored MF + GraphSAGE JSONs and
   write comparison JSON, markdown table, and SVG chart. Does not invent
   metrics.
@@ -41,5 +43,6 @@ Opened Phase 2 sampler timing:
 
 Do not add MovieLens 1M scripts. The Phase 4 mini-batch helper lives in
 `python/sagerec_minibatch.py`. GraphSAGE training lives in
-`python/sagerec_graphsage.py`. Sampler timing logic lives in
+`python/sagerec_graphsage.py` (Phase 6: PyG SAGEConv, native
+neighborhoods). Sampler timing logic lives in
 `python/sagerec_sampler_benchmark.py`.

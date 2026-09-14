@@ -12,6 +12,7 @@ choice, alternatives, rationale, and consequences.
 | ADR-003 | Split | Per-user chronological leave-one-out / global time split | Accepted: per-user chronological leave-one-out |
 | ADR-004 | Baseline | Matrix factorization / node2vec | Accepted: matrix factorization |
 | ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Accepted: uniform without replacement |
+| ADR-006 | GraphSAGE production stack | PyG SAGEConv on native samples / PyG NeighborLoader / in-repo mean layers | Accepted: PyG SAGEConv on native `graph_sampler` neighborhoods |
 
 ## Accepted
 
@@ -71,7 +72,9 @@ contract during mini-batch training.
 - Do not add GCN model code, GCN configs, or GCN-versus-GraphSAGE experiment
   matrices unless a superseding decision accepts GCN.
 - The native sampler remains the training neighborhood source; do not silently
-  substitute a PyG neighbor sampler in primary experiments.
+  substitute a PyG neighbor sampler in primary experiments. ADR-006 records
+  the production conv stack (PyG `SAGEConv`) while keeping that neighborhood
+  contract.
 - ADR-003 (split), ADR-004 (matrix factorization), and ADR-005
   (uniform sampling without replacement) are accepted separately.
 
@@ -224,6 +227,57 @@ implementations and every parity/benchmark comparison.
   substitute a with-replacement PyG sampler. The Phase 4 mini-batch helper
   (`python/sagerec_minibatch.py`) calls native `sample_neighbors` with this
   without-replacement policy.
+
+### ADR-006: PyG SAGEConv on native neighborhoods
+
+- Date: 2026-09-14
+- Owner: Nithilan Kumaran
+- Status: Accepted
+
+**Context:** Project requirements say Python training must use PyTorch and
+PyTorch Geometric. Phase 4/5 already train GraphSAGE (ADR-002) on CPU
+PyTorch with in-repo mean aggregation, while neighborhoods come from native
+`graph_sampler` via `sagerec_minibatch` (ADR-005). The remaining gap is the
+production conv stack. Switching neighborhood expansion to a PyG
+`NeighborLoader` / `ClusterLoader` would abandon the systems contribution.
+
+**Choice:** Use PyTorch Geometric `SAGEConv` (mean aggregation, or a
+documented equivalent PyG GraphSAGE layer) as the message-passing stack.
+Neighborhoods **must** still come from native `graph_sampler` via
+`sagerec_minibatch.NativeMinibatchSampler`. Do not use `NeighborLoader`,
+`ClusterLoader`, or any PyG sampler as the neighborhood source in primary
+experiments.
+
+**Alternatives:** Keep the in-repo `Linear(concat(self, mean(neighbors)))`
+layers indefinitely; or adopt PyG `NeighborLoader` (or another PyG sampler)
+for mini-batch expansion.
+
+**Rationale:** The owner accepted a PyG production path on 2026-09-14. That
+closes the PyTorch Geometric requirement without replacing the C++ CSR +
+seeded ADR-005 sampler. A thin adapter from native multi-hop samples to the
+`edge_index` form `SAGEConv` expects is allowed; replacing the sampler is
+not.
+
+**Consequences:**
+
+- `python/sagerec_graphsage.py` must import and call PyG `SAGEConv` (or an
+  equivalent documented PyG GraphSAGE conv). Pair scoring and the native
+  mini-batch wiring stay in SageRec.
+- `python/sagerec_minibatch.py` / `graph_sampler` remain the only
+  neighborhood expansion path for primary training and the stored 100K
+  experiment protocol.
+- CPU-friendly PyG install pins live in `python/requirements-train.txt`.
+  Optional PyG extension wheels (`torch-scatter`, `torch-sparse`,
+  `pyg-lib`) are not required for mean `SAGEConv` and must not be added to
+  default CI. Native C++ stays free of PyTorch and PyG.
+- Tests must spy that native `sample_neighbors` still runs and must reject
+  `NeighborLoader` / `ClusterLoader` on the primary path.
+- Stored MovieLens 100K GraphSAGE metrics under `results/` were measured
+  with the Phase 5 in-repo mean layers. Do not retcon or hand-edit those
+  files; do not claim new 100K quality numbers without a measured rerun.
+  Tiny synthetic metrics remain protocol smoke.
+- MovieLens 1M, GCN, and node2vec remain deferred/rejected unless a
+  superseding ADR accepts them.
 
 ## Proposals
 

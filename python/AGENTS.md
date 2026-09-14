@@ -7,8 +7,9 @@ MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
 `processed/` writes, the implicit MF baseline (ADR-004), the shared
 ranking evaluator, the native-backed mini-batch neighborhood helper,
 GraphSAGE training on that harness, the Phase 5 GNN-versus-MF
-comparison writer, and the Phase 2 native-versus-reference sampler
-timing harness.
+comparison writer, the Phase 2 native-versus-reference sampler
+timing harness, and Phase 6 PyG SAGEConv message passing on native
+samples.
 
 ## Current slice
 
@@ -43,14 +44,14 @@ timing harness.
   `BipartiteCSR` from local pairs and seeded multi-hop expansion via
   native `graph_sampler.sample_neighbors` (ADR-005). GraphSAGE training
   must call this helper; do not fall back to a PyG NeighborLoader.
-- `sagerec_graphsage.py` is the GraphSAGE training slice: PyTorch
-  mean-aggregation layers, `PairScorer` scoring, and a seeded trainer
-  that expands neighborhoods through `sagerec_minibatch`. CPU-only
-  PyTorch is pinned in `requirements-train.txt`. PyG remains the intended
-  production stack; this slice does not install or call PyG (no
-  NeighborLoader / SAGEConv). `movielens_100k_config` is the modest
-  CPU-friendly 100K hyperparameter set (seed 7). Tiny synthetic metrics
-  are protocol smoke and must stay separate from stored 100K numbers.
+- `sagerec_graphsage.py` is the GraphSAGE training slice: PyG `SAGEConv`
+  layers (ADR-006), `PairScorer` scoring, and a seeded trainer that
+  expands neighborhoods through `sagerec_minibatch`. CPU-only PyTorch and
+  `torch-geometric` are pinned in `requirements-train.txt`. Do not use a
+  PyG NeighborLoader / ClusterLoader as the neighborhood source.
+  `movielens_100k_config` is the modest CPU-friendly 100K hyperparameter
+  set (seed 7). Tiny synthetic metrics are protocol smoke and must stay
+  separate from stored 100K numbers. Do not retcon Phase 5 100K JSON.
 - `sagerec_compare.py` writes the Phase 5 MF-versus-GraphSAGE JSON,
   markdown table, and SVG chart from stored result files. It does not
   invent metrics.
@@ -73,9 +74,9 @@ timing harness.
 - Depend on a narrow sampler protocol so unit tests can inject a deterministic fake.
 - Baseline and GNN evaluation must call `sagerec_metrics.evaluate_ranking`.
 - NumPy is required for the MF baseline. GraphSAGE training requires
-  CPU PyTorch (`python/requirements-train.txt`). Do not add PyTorch to
-  the C++ graph core. Do not use a PyG neighbor sampler for primary
-  experiments.
+  CPU PyTorch and PyTorch Geometric (`python/requirements-train.txt`).
+  Do not add PyTorch or PyG to the C++ graph core. Do not use a PyG
+  neighbor sampler for primary experiments.
 
 ## Correctness
 
@@ -113,6 +114,10 @@ timing harness.
   stay out of the train CSR; tiny seeded synthetic smoke metrics are
   finite in `[0, 1]` and reproducible. Label those metrics as protocol
   smoke, not a MovieLens 100K result.
+- Phase 6 PyG conv stack: training constructs `SAGEConv` layers; native
+  hops are converted to `edge_index` without calling NeighborLoader or
+  ClusterLoader. Source/runtime tests must forbid those PyG loaders on
+  the primary path.
 - Phase 5 comparison writer: schema/protocol-match tests on fixture
   JSON; GraphSAGE 100K wiring still requires
   `NativeMinibatchSampler` and spies on native sampling. Do not add a

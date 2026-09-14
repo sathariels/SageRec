@@ -1,14 +1,16 @@
 # Phased Implementation Plan
 
 ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
-chronological leave-one-out), ADR-004 (matrix factorization), and ADR-005
-(uniform sampling without replacement) are accepted. MovieLens 1M remains
-deferred. Phase 2 download and on-disk `processed/` prep are open for
-MovieLens 100K. Phase 2 timing charts are delivered (native vs Python
-reference sampler, stored JSON/SVG). Phase 4 GraphSAGE training on the
-native-backed mini-batch harness is delivered. Phase 5 is delivered for
-the single-seed 100K GraphSAGE run and GNN-versus-MF comparison (not a
-multi-seed leaderboard).
+chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
+(uniform sampling without replacement), and ADR-006 (PyG SAGEConv on
+native neighborhoods) are accepted. MovieLens 1M remains deferred. Phase 2
+download and on-disk `processed/` prep are open for MovieLens 100K. Phase 2
+timing charts are delivered (native vs Python reference sampler, stored
+JSON/SVG). Phase 4 GraphSAGE training on the native-backed mini-batch
+harness is delivered. Phase 5 is delivered for the single-seed 100K
+GraphSAGE run and GNN-versus-MF comparison (not a multi-seed leaderboard).
+Phase 6 is delivered for PyG `SAGEConv` message passing still fed by
+`graph_sampler` / `sagerec_minibatch`.
 
 ## Phase 1: Native foundation
 
@@ -138,28 +140,22 @@ Opened in the mini-batch harness slice:
 
 Opened in the GraphSAGE training slice:
 
-- PyTorch GraphSAGE mean layers and trainer (`python/sagerec_graphsage.py`)
-  that implement `PairScorer` and call `NativeMinibatchSampler` for every
-  neighborhood expansion. CPU-only `torch==2.6.0` is pinned in
+- PyTorch GraphSAGE trainer (`python/sagerec_graphsage.py`) that implements
+  `PairScorer` and calls `NativeMinibatchSampler` for every neighborhood
+  expansion. CPU-only `torch==2.6.0` is pinned in
   `python/requirements-train.txt`.
 - Primary experiments must not use a PyG NeighborLoader or other Python
-  sampler. PyG remains the intended production stack for later SAGEConv /
-  tensor conversion; this slice is an in-repo PyTorch trainer on native
-  samples, not a NumPy fallback.
+  sampler. Phase 6 replaces the in-repo mean layers with PyG `SAGEConv`
+  while keeping this native neighborhood contract.
 - Tiny synthetic ADR-003 smoke (`python/tests/test_graphsage_train.py`):
   native `sample_neighbors` spy, train-only CSR leakage, negatives exclude
   known positives, and seeded Recall@10 / NDCG@10 that stay finite in
   `[0, 1]` and match across two runs. Those metrics are protocol smoke,
   not a MovieLens 100K result.
 
-Still not started:
-
-- PyG `SAGEConv` / NeighborLoader integration. Do not silently substitute
-  a PyG sampler.
-
 Exit condition: reproducible tiny GraphSAGE training smoke exists and
 proves native sampling is on the training path. Phase 5 owns the 100K
-GNN-versus-baseline report.
+GNN-versus-baseline report. Phase 6 owns the PyG conv stack.
 
 ## Phase 5: Comparison and documentation
 
@@ -182,9 +178,39 @@ Opened in the MovieLens 100K GraphSAGE quality slice:
 Still not started:
 
 - Multi-seed published leaderboard / uncertainty bars.
-- PyG production path.
 
 Exit condition: stored 100K GraphSAGE metrics with provenance, comparison
 table/chart consistent with both result files, and CI green (CTest +
 Python tests). Phase 2 timing charts are delivered separately under
-`results/sampler_timing.*`.
+`results/sampler_timing.*`. Phase 6 does not retcon those 100K numbers.
+
+## Phase 6: PyG SAGEConv on native samples
+
+Opened in the PyG production-path slice (ADR-006):
+
+- GraphSAGE message passing uses `torch_geometric.nn.SAGEConv` (mean
+  aggregation) in `python/sagerec_graphsage.py`.
+- A thin adapter (`neighborhood_hop_to_edge_index`) converts native
+  multi-hop `NeighborhoodBatch` hops into the `edge_index` form SAGEConv
+  expects. It does not sample.
+- Neighborhoods still come only from `graph_sampler` via
+  `sagerec_minibatch.NativeMinibatchSampler`. Tests spy native
+  `sample_neighbors` and forbid `NeighborLoader` / `ClusterLoader` on the
+  primary path.
+- CPU-friendly pins: `torch==2.6.0` and `torch-geometric==2.6.1` in
+  `python/requirements-train.txt`. Optional PyG extension wheels are not
+  required for mean SAGEConv and are not installed in default CI. Native
+  C++ stays free of PyTorch/PyG.
+
+Still not started:
+
+- A measured MovieLens 100K quality rerun with SAGEConv (do not invent
+  or hand-edit `results/graphsage_movielens_100k.json` or the comparison
+  artifacts). Tiny synthetic metrics remain protocol smoke.
+- PyG NeighborLoader / ClusterLoader as a neighborhood source (rejected
+  for primary experiments).
+
+Exit condition: training path uses SAGEConv + native neighborhoods,
+harness tests prove the native sampler is called and NeighborLoader is
+not, docs/requirements match, and Release CTest / unittest / CI stay
+green on CPU.

@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/sathariels/SageRec/actions/workflows/ci.yml/badge.svg)](https://github.com/sathariels/SageRec/actions/workflows/ci.yml)
 
-SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, and GraphSAGE training on that harness.
+SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, and GraphSAGE training on that harness (PyG `SAGEConv`, native neighborhoods).
 
-GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
+GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Phase 6 uses PyG `SAGEConv` for message passing while neighborhoods still come from the native sampler. Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -12,11 +12,11 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 
 | Built | Not yet |
 | --- | --- |
-| C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | PyG NeighborLoader / SAGEConv (intended later) |
+| C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | PyG NeighborLoader / ClusterLoader (rejected for primary experiments) |
 | MovieLens 100K in-memory `u.data` parser | Production serving |
 | Official 100K download + on-disk `data/processed/` prep | Multi-seed published leaderboard |
-| Native-backed mini-batch neighborhood helper | |
-| GraphSAGE training on native samples (CPU PyTorch) | |
+| Native-backed mini-batch neighborhood helper | Measured SAGEConv 100K rerun (Phase 5 JSON stays as measured) |
+| GraphSAGE training on native samples (CPU PyTorch Geometric `SAGEConv`) | |
 | pybind11 `graph_sampler` bindings | |
 | Python reference sampler + native parity tests | |
 | ADR-003 leave-one-out split/prep (in-memory and on-disk) | |
@@ -38,7 +38,7 @@ This is a systems + ML-infra portfolio piece, not a notebook demo.
 - **Native sampler:** neighbor sampling is real C++ CSR code with an explicit seed, not a wrapper around a graph library.
 - **Harness first:** native tests, binding tests, sampler parity, split leakage tests, download/prep fixture tests, a seeded MF metric smoke run, mini-batch native-sampler tests, a GraphSAGE training smoke that spies on `graph_sampler` in CI, and native-versus-reference sampler timing tests.
 
-The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) calls `graph_sampler` for seeded multi-hop neighborhood expansion. GraphSAGE training in [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) uses those native samples with PyTorch mean aggregation. It does not use a PyG neighbor sampler.
+The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) calls `graph_sampler` for seeded multi-hop neighborhood expansion. GraphSAGE training in [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) converts those native hops into PyG `edge_index` tensors and applies `SAGEConv`. It does not use a PyG neighbor sampler.
 
 ## Architecture
 
@@ -72,12 +72,12 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | Leave-one-out prep | [`python/sagerec_prep.py`](python/sagerec_prep.py) — in-memory ADR-003 split; train-only pairs for `BipartiteCSR` |
 | 100K download | [`python/sagerec_download.py`](python/sagerec_download.py) — official GroupLens zip, published MD5, extract `u.data` |
 | On-disk prep | [`python/sagerec_dataset.py`](python/sagerec_dataset.py) — path/bytes → parser → ADR-003 → `data/processed/` + manifest |
-| Scoring protocol | [`python/sagerec_scoring.py`](python/sagerec_scoring.py) — `PairScorer` for baseline and future GNN |
+| Scoring protocol | [`python/sagerec_scoring.py`](python/sagerec_scoring.py) — `PairScorer` for baseline and GraphSAGE |
 | Training negatives | [`python/sagerec_negatives.py`](python/sagerec_negatives.py) — exclude known positives in the caller-supplied scope |
 | MF baseline | [`python/sagerec_baseline.py`](python/sagerec_baseline.py) — seeded NumPy logistic SGD |
 | Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10 |
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
-| GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — CPU PyTorch mean layers + `PairScorer` on native samples |
+| GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — PyG `SAGEConv` + `PairScorer` on native samples |
 | Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
 | Sampler timing | [`python/sagerec_sampler_benchmark.py`](python/sagerec_sampler_benchmark.py) — native vs reference `sample_neighbors` JSON/SVG |
 
@@ -104,7 +104,7 @@ If `files.grouplens.org` presents an expired TLS certificate, the downloader ret
 
 ## MovieLens 100K GraphSAGE quality run and GNN-versus-MF comparison
 
-Shared protocol with the stored MF run: ADR-003 leave-one-out, test split, Recall@10 / NDCG@10, 943 eligible users, seed **7**. GraphSAGE uses a modest CPU-friendly set (`embedding_dim=16`, `hidden_dim=16`, two layers, fanouts `(8, 8)`, **3 Adam epochs**, `batch_size=256`, `learning_rate=0.01`, 2 negatives). MF used **1 SGD epoch**; fairness is the shared eval protocol, not identical wall-clock or optimizer. Extra training seeds are derived from 7 (`derived_sample_seed(seed, epoch, step)` per mini-batch; hop/source mixing inside multi-hop). Ranking encodes each graph node once at seed 7 via native sampling, then dots cached embeddings.
+Shared protocol with the stored MF run: ADR-003 leave-one-out, test split, Recall@10 / NDCG@10, 943 eligible users, seed **7**. GraphSAGE uses a modest CPU-friendly set (`embedding_dim=16`, `hidden_dim=16`, two layers, fanouts `(8, 8)`, **3 Adam epochs**, `batch_size=256`, `learning_rate=0.01`, 2 negatives). Current training applies PyG `SAGEConv` to native mini-batches. MF used **1 SGD epoch**; fairness is the shared eval protocol, not identical wall-clock or optimizer. Extra training seeds are derived from 7 (`derived_sample_seed(seed, epoch, step)` per mini-batch; hop/source mixing inside multi-hop). Ranking encodes each graph node once at seed 7 via native sampling, then dots cached embeddings.
 
 ```bash
 PYTHONPATH=build:python python3 scripts/run_graphsage_movielens_100k.py \
@@ -128,7 +128,7 @@ Single-seed test-split numbers copied from those files (seed 7, 943 users):
 | implicit MF | 1 SGD | 0.038176 | 0.020303 |
 | GraphSAGE | 3 Adam | 0.047720 | 0.020969 |
 
-This is not a multi-seed leaderboard and not a production-quality claim.
+This is not a multi-seed leaderboard and not a production-quality claim. The GraphSAGE row is the stored Phase 5 run (in-repo mean layers); it is not a new SAGEConv 100K measurement.
 
 ## Native vs Python reference sampler timing
 
@@ -166,18 +166,20 @@ Recorded in [`docs/decisions.md`](docs/decisions.md):
 | ADR-003 | Accepted | Per-user chronological leave-one-out; min 3 interactions; cold-start users stay in train and are excluded from ranking |
 | ADR-004 | Accepted | Implicit-feedback matrix factorization (not node2vec) |
 | ADR-005 | Accepted | Uniform sampling without replacement |
+| ADR-006 | Accepted | PyG `SAGEConv` on native `graph_sampler` neighborhoods (not NeighborLoader) |
 
 The native and Python reference samplers implement ADR-005 (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). Changing replacement policy requires a superseding ADR.
 
 ## Build and test
 
-Debian/Ubuntu: `cmake`, a C++17 compiler (`g++`), `python3-dev`, `pybind11-dev`, `python3-pybind11`, and `python3-numpy`. GraphSAGE tests also need CPU PyTorch (`python/requirements-train.txt`):
+Debian/Ubuntu: `cmake`, a C++17 compiler (`g++`), `python3-dev`, `pybind11-dev`, `python3-pybind11`, and `python3-numpy`. GraphSAGE tests also need CPU PyTorch and PyTorch Geometric (`python/requirements-train.txt`):
 
 ```bash
 python3 -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+python3 -m pip install torch-geometric==2.6.1
 ```
 
-Native C++ does not depend on PyTorch. PyTorch Geometric is the intended later production stack; this slice trains with in-repo mean layers on native samples.
+Native C++ does not depend on PyTorch or PyG. Mean `SAGEConv` does not need `torch-scatter` / `torch-sparse` / `pyg-lib`. Neighborhoods still come from `graph_sampler`, not a PyG NeighborLoader.
 
 ```bash
 cmake -S cpp -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++
@@ -208,10 +210,10 @@ Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only 
 - No production users, no invented metrics, and no production-latency or SOTA speedup claims.
 - Tiny synthetic MF and GraphSAGE smokes are protocol verification, not MovieLens 100K evaluation.
 - A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE and not a multi-seed leaderboard.
-- A single-seed 100K GraphSAGE run is recorded under `results/graphsage_movielens_100k.json`. Neighborhoods come from `graph_sampler` via `sagerec_minibatch`, not a PyG NeighborLoader.
+- A single-seed 100K GraphSAGE run is recorded under `results/graphsage_movielens_100k.json`. Neighborhoods come from `graph_sampler` via `sagerec_minibatch`, not a PyG NeighborLoader. Those stored numbers were measured with the Phase 5 in-repo mean layers; Phase 6 does not retcon them as a SAGEConv 100K rerun.
 - The Phase 5 comparison table/chart is generated from those two JSON files.
 - Native vs Python reference sampler timings are stored under `results/sampler_timing.json` (synthetic graph, median of measured repetitions). They are one-machine evidence, not a production latency or SOTA claim.
-- A PyG production training path is still ahead.
+- Production message passing is PyG `SAGEConv` on native mini-batches (ADR-006). PyG NeighborLoader is not the neighborhood source.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.
