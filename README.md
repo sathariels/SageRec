@@ -147,7 +147,14 @@ Default CI does **not** run that 100K job. Outputs (measured, not invented):
 - [`results/multiseed_gnn_vs_mf_movielens_100k.md`](results/multiseed_gnn_vs_mf_movielens_100k.md)
 - [`results/multiseed_gnn_vs_mf_movielens_100k.svg`](results/multiseed_gnn_vs_mf_movielens_100k.svg)
 
-Headline uncertainty is **mean ± sample standard deviation (n-1)** over the five seeds; median is also stored. Copy numbers from those files after a measured run. Phase 5 single-seed JSONs are left unchanged.
+Copied from the stored JSON (seeds 7, 11, 13, 17, 19; 943 eligible users; mean ± sample std, n-1):
+
+| Model | Epochs | Recall@10 mean±std | Recall@10 median | NDCG@10 mean±std | NDCG@10 median |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| implicit MF | 1 SGD | 0.039024 ± 0.006848 | 0.038176 | 0.020082 ± 0.002658 | 0.020303 |
+| GraphSAGE | 3 Adam | 0.044963 ± 0.007742 | 0.042418 | 0.020948 ± 0.005239 | 0.020354 |
+
+This is not a SOTA claim. GraphSAGE is PyG `SAGEConv` on native `graph_sampler` neighborhoods. Phase 5 single-seed JSONs were not overwritten; seed-7 MF here matches that historical MF run, while seed-7 GraphSAGE is a new SAGEConv measurement (not the Phase 5 in-repo mean-layer number).
 
 ## Native vs Python reference sampler timing
 

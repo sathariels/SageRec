@@ -1,0 +1,227 @@
+{
+  "comparison": "multiseed_gnn_vs_mf",
+  "protocol_version": "adr-007-v1",
+  "dataset_edition": "100k",
+  "split_policy_id": "per_user_chronological_leave_one_out",
+  "split_policy_version": "adr-003-v1",
+  "min_interactions_for_eval": 3,
+  "cold_start_policy": "all_to_train_exclude_from_eval",
+  "split": "test",
+  "k": 10,
+  "seeds": [
+    7,
+    11,
+    13,
+    17,
+    19
+  ],
+  "n_seeds": 5,
+  "continuity_seed": 7,
+  "n_evaluated_users": 943,
+  "uncertainty": {
+    "headline": "mean_pm_sample_std",
+    "std_definition": "sample standard deviation (n-1)",
+    "also_reports": [
+      "median",
+      "min",
+      "max"
+    ]
+  },
+  "protocol_note": "Same ADR-003 split, eligible users, candidate protocol, and Recall@10 / NDCG@10 across seeds [7, 11, 13, 17, 19]. Fairness is the shared eval protocol, not identical wall-clock or optimizer budget (MF n_epochs=1 SGD, GraphSAGE n_epochs=3 adam). GraphSAGE uses PyG SAGEConv on native graph_sampler neighborhoods (ADR-006); not a NeighborLoader run.",
+  "historical_single_seed": {
+    "implicit_mf": "results/mf_movielens_100k.json",
+    "graphsage": "results/graphsage_movielens_100k.json",
+    "comparison": "results/gnn_vs_mf_movielens_100k.json",
+    "note": "Phase 5 single-seed provenance (seed 7). GraphSAGE there used in-repo mean layers; this multi-seed table is a separate SAGEConv measurement and does not retcon those files."
+  },
+  "models": {
+    "implicit_mf": {
+      "n_epochs": 1,
+      "hyperparams": {
+        "n_factors": 16,
+        "n_epochs": 1,
+        "learning_rate": 0.05,
+        "n_negatives": 2,
+        "l2": 0.01,
+        "init_std": 0.1
+      },
+      "recall_at_k": {
+        "n": 5,
+        "mean": 0.03902439024390244,
+        "std": 0.0068478830502493905,
+        "median": 0.03817603393425239,
+        "min": 0.030752916224814422,
+        "max": 0.04984093319194061,
+        "values": [
+          0.03817603393425239,
+          0.03817603393425239,
+          0.030752916224814422,
+          0.03817603393425239,
+          0.04984093319194061
+        ]
+      },
+      "ndcg_at_k": {
+        "n": 5,
+        "mean": 0.020082202682418723,
+        "std": 0.0026583023642585187,
+        "median": 0.020303175177886473,
+        "min": 0.01642309157288939,
+        "max": 0.02353710770209877,
+        "values": [
+          0.020303175177886473,
+          0.018871352508656358,
+          0.01642309157288939,
+          0.02127628645056263,
+          0.02353710770209877
+        ]
+      },
+      "optimizer": "sgd"
+    },
+    "graphsage": {
+      "n_epochs": 3,
+      "hyperparams": {
+        "embedding_dim": 16,
+        "hidden_dim": 16,
+        "n_layers": 2,
+        "fanouts": [
+          8,
+          8
+        ],
+        "n_epochs": 3,
+        "batch_size": 256,
+        "learning_rate": 0.01,
+        "n_negatives": 2,
+        "l2": 0.0001,
+        "init_std": 0.1,
+        "optimizer": "adam"
+      },
+      "recall_at_k": {
+        "n": 5,
+        "mean": 0.04496288441145281,
+        "std": 0.007741977623942304,
+        "median": 0.042417815482502653,
+        "min": 0.03711558854718982,
+        "max": 0.05514316012725345,
+        "values": [
+          0.042417815482502653,
+          0.03923647932131495,
+          0.03711558854718982,
+          0.05514316012725345,
+          0.05090137857900318
+        ]
+      },
+      "ndcg_at_k": {
+        "n": 5,
+        "mean": 0.020947985290800875,
+        "std": 0.005238772934790084,
+        "median": 0.02035401246685008,
+        "min": 0.015817693476276328,
+        "max": 0.027521728428365966,
+        "values": [
+          0.02035401246685008,
+          0.016077384823646144,
+          0.015817693476276328,
+          0.027521728428365966,
+          0.024969107258865853
+        ]
+      },
+      "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+      "conv_stack": "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch edge_index; not a PyG NeighborLoader",
+      "optimizer": "adam"
+    }
+  },
+  "per_seed": [
+    {
+      "seed": 7,
+      "implicit_mf": {
+        "recall_at_k": 0.03817603393425239,
+        "ndcg_at_k": 0.020303175177886473,
+        "n_epochs": 1
+      },
+      "graphsage": {
+        "recall_at_k": 0.042417815482502653,
+        "ndcg_at_k": 0.02035401246685008,
+        "n_epochs": 3,
+        "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+        "conv_stack": "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch edge_index; not a PyG NeighborLoader"
+      }
+    },
+    {
+      "seed": 11,
+      "implicit_mf": {
+        "recall_at_k": 0.03817603393425239,
+        "ndcg_at_k": 0.018871352508656358,
+        "n_epochs": 1
+      },
+      "graphsage": {
+        "recall_at_k": 0.03923647932131495,
+        "ndcg_at_k": 0.016077384823646144,
+        "n_epochs": 3,
+        "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+        "conv_stack": "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch edge_index; not a PyG NeighborLoader"
+      }
+    },
+    {
+      "seed": 13,
+      "implicit_mf": {
+        "recall_at_k": 0.030752916224814422,
+        "ndcg_at_k": 0.01642309157288939,
+        "n_epochs": 1
+      },
+      "graphsage": {
+        "recall_at_k": 0.03711558854718982,
+        "ndcg_at_k": 0.015817693476276328,
+        "n_epochs": 3,
+        "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+        "conv_stack": "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch edge_index; not a PyG NeighborLoader"
+      }
+    },
+    {
+      "seed": 17,
+      "implicit_mf": {
+        "recall_at_k": 0.03817603393425239,
+        "ndcg_at_k": 0.02127628645056263,
+        "n_epochs": 1
+      },
+      "graphsage": {
+        "recall_at_k": 0.05514316012725345,
+        "ndcg_at_k": 0.027521728428365966,
+        "n_epochs": 3,
+        "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+        "conv_stack": "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch edge_index; not a PyG NeighborLoader"
+      }
+    },
+    {
+      "seed": 19,
+      "implicit_mf": {
+        "recall_at_k": 0.04984093319194061,
+        "ndcg_at_k": 0.02353710770209877,
+        "n_epochs": 1
+      },
+      "graphsage": {
+        "recall_at_k": 0.05090137857900318,
+        "ndcg_at_k": 0.024969107258865853,
+        "n_epochs": 3,
+        "sampler": "graph_sampler.BipartiteCSR.sample_neighbors via sagerec_minibatch.NativeMinibatchSampler (ADR-005, no PyG NeighborLoader)",
+        "conv_stack": "torch_geometric.nn.SAGEConv (mean) on native NeighborhoodBatch edge_index; not a PyG NeighborLoader"
+      }
+    }
+  ],
+  "note": "Values are copied from measured per-seed ranking runs in this environment. Historical Phase 5 files remain single-seed provenance and were not overwritten. This is not a SOTA claim.",
+  "provenance": {
+    "git_commit": "f249356d7cfb10b0594c87e648d74a9c4b61491f",
+    "generated_at": "2026-09-15T17:00:51.411958+00:00",
+    "python": "3.12.3",
+    "numpy": "2.4.4",
+    "torch": "2.6.0+cpu",
+    "torch_geometric": "2.6.1",
+    "platform": {
+      "system": "Linux",
+      "release": "6.12.94+",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    }
+  },
+  "chart_path": "results/multiseed_gnn_vs_mf_movielens_100k.svg",
+  "table_path": "results/multiseed_gnn_vs_mf_movielens_100k.md"
+}

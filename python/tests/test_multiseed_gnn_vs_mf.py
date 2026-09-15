@@ -318,6 +318,61 @@ class HistoricalSingleSeedTests(unittest.TestCase):
             notes["graphsage"]["path"], "results/graphsage_movielens_100k.json"
         )
 
+    def test_committed_multiseed_file_matches_per_seed_math(self) -> None:
+        path = _REPO_ROOT / "results" / "multiseed_gnn_vs_mf_movielens_100k.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["comparison"], "multiseed_gnn_vs_mf")
+        self.assertEqual(payload["protocol_version"], "adr-007-v1")
+        self.assertEqual(payload["seeds"], [7, 11, 13, 17, 19])
+        self.assertEqual(payload["n_evaluated_users"], 943)
+        mf_recalls = [
+            row["implicit_mf"]["recall_at_k"] for row in payload["per_seed"]
+        ]
+        gnn_recalls = [
+            row["graphsage"]["recall_at_k"] for row in payload["per_seed"]
+        ]
+        self.assertAlmostEqual(
+            payload["models"]["implicit_mf"]["recall_at_k"]["mean"],
+            statistics.fmean(mf_recalls),
+        )
+        self.assertAlmostEqual(
+            payload["models"]["implicit_mf"]["recall_at_k"]["std"],
+            statistics.stdev(mf_recalls),
+        )
+        self.assertAlmostEqual(
+            payload["models"]["graphsage"]["recall_at_k"]["mean"],
+            statistics.fmean(gnn_recalls),
+        )
+        self.assertAlmostEqual(
+            payload["models"]["graphsage"]["recall_at_k"]["std"],
+            statistics.stdev(gnn_recalls),
+        )
+        hist_mf = compare.load_ranking_result(
+            _REPO_ROOT / "results" / "mf_movielens_100k.json"
+        )
+        hist_gnn = compare.load_ranking_result(
+            _REPO_ROOT / "results" / "graphsage_movielens_100k.json"
+        )
+        self.assertAlmostEqual(
+            payload["per_seed"][0]["implicit_mf"]["recall_at_k"],
+            hist_mf["metrics"]["recall_at_k"],
+        )
+        self.assertNotAlmostEqual(
+            payload["per_seed"][0]["graphsage"]["recall_at_k"],
+            hist_gnn["metrics"]["recall_at_k"],
+        )
+        markdown = (
+            _REPO_ROOT / "results" / "multiseed_gnn_vs_mf_movielens_100k.md"
+        ).read_text(encoding="utf-8")
+        svg = (
+            _REPO_ROOT / "results" / "multiseed_gnn_vs_mf_movielens_100k.svg"
+        ).read_text(encoding="utf-8")
+        mean_s = f"{payload['models']['implicit_mf']['recall_at_k']['mean']:.6f}"
+        self.assertIn(mean_s, markdown)
+        self.assertIn("sample std", svg.lower())
+        self.assertIn("SAGEConv", payload["protocol_note"])
+        self.assertIn("NeighborLoader", payload["protocol_note"])
+
     def test_phase5_comparison_writer_still_labels_single_seed(self) -> None:
         mf = _fixture_result(model="implicit_mf", recall=0.1, ndcg=0.05, n_epochs=1)
         gnn = _fixture_result(
