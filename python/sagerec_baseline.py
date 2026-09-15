@@ -77,6 +77,39 @@ class MFConfig:
         if init_std <= 0.0:
             raise ValueError(f"init_std must be > 0, got {init_std}")
 
+    def as_dict(self) -> dict[str, Any]:
+        """JSON-ready hyperparameter block."""
+        return {
+            "n_factors": self.n_factors,
+            "n_epochs": self.n_epochs,
+            "learning_rate": self.learning_rate,
+            "n_negatives": self.n_negatives,
+            "l2": self.l2,
+            "init_std": self.init_std,
+        }
+
+
+def movielens_100k_config(seed: int = 7) -> MFConfig:
+    """MovieLens 100K implicit-MF hyperparameters matching the Phase 5 run.
+
+    Default seed is **7** for continuity with
+    ``results/mf_movielens_100k.json``. This uses **1 SGD epoch**; GraphSAGE
+    100K uses 3 Adam epochs. Fairness is the shared ADR-003 ranking
+    protocol, not identical wall-clock or optimizer.
+    """
+    seed = _require_int(seed, "seed")
+    if seed < 0:
+        raise ValueError(f"seed must be >= 0, got {seed}")
+    return MFConfig(
+        n_factors=16,
+        n_epochs=1,
+        learning_rate=0.05,
+        n_negatives=2,
+        l2=0.01,
+        seed=seed,
+        init_std=0.1,
+    )
+
 
 class ImplicitMF:
     """Seeded implicit MF. Implements ``PairScorer.score_pairs``."""
@@ -289,3 +322,66 @@ def train_implicit_mf(
         num_items=split.num_movies,
         config=config,
     )
+
+
+def mf_result_payload(
+    *,
+    manifest: dict[str, Any],
+    config: MFConfig,
+    report: Any,
+    git_commit: str | None,
+    generated_at: str,
+    python_version: str,
+    numpy_version: str,
+    platform_info: dict[str, str],
+) -> dict[str, Any]:
+    """Machine-readable MovieLens 100K implicit-MF provenance."""
+    required_manifest = (
+        "dataset_edition",
+        "split_policy_id",
+        "split_policy_version",
+        "min_interactions_for_eval",
+        "cold_start_policy",
+        "counts",
+    )
+    missing = [key for key in required_manifest if key not in manifest]
+    if missing:
+        raise ValueError(f"manifest is missing required keys: {missing}")
+    counts = manifest["counts"]
+    return {
+        "model": "implicit_mf",
+        "dataset_edition": manifest["dataset_edition"],
+        "source_url": manifest.get("source_url"),
+        "checksum": manifest.get("checksum"),
+        "license": manifest.get("license"),
+        "split_policy_id": manifest["split_policy_id"],
+        "split_policy_version": manifest["split_policy_version"],
+        "min_interactions_for_eval": manifest["min_interactions_for_eval"],
+        "cold_start_policy": manifest["cold_start_policy"],
+        "seed": config.seed,
+        "git_commit": git_commit,
+        "generated_at": generated_at,
+        "python": python_version,
+        "numpy": numpy_version,
+        "platform": dict(platform_info),
+        "hyperparams": config.as_dict(),
+        "metrics": {
+            "k": report.k,
+            "split": report.split,
+            "recall_at_k": report.recall_at_k,
+            "ndcg_at_k": report.ndcg_at_k,
+            "n_evaluated_users": report.n_users,
+        },
+        "eligibility": {
+            "users": counts["users"],
+            "movies": counts["movies"],
+            "interactions": counts["interactions"],
+            "eligible_users": counts["eligible_users"],
+            "cold_start_users": counts["cold_start_users"],
+            "evaluated_users": report.n_users,
+        },
+        "note": (
+            "Single-seed MovieLens 100K implicit-MF run on the ADR-003 split. "
+            "Not a GraphSAGE result and not a multi-seed leaderboard."
+        ),
+    }

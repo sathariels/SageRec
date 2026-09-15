@@ -8,8 +8,8 @@ MovieLens 100K split/prep (ADR-003), official 100K download and on-disk
 ranking evaluator, the native-backed mini-batch neighborhood helper,
 GraphSAGE training on that harness, the Phase 5 GNN-versus-MF
 comparison writer, the Phase 2 native-versus-reference sampler
-timing harness, and Phase 6 PyG SAGEConv message passing on native
-samples.
+timing harness, Phase 6 PyG SAGEConv message passing on native
+samples, and the ADR-007 multi-seed MF vs GraphSAGE aggregator.
 
 ## Current slice
 
@@ -54,7 +54,11 @@ samples.
   separate from stored 100K numbers. Do not retcon Phase 5 100K JSON.
 - `sagerec_compare.py` writes the Phase 5 MF-versus-GraphSAGE JSON,
   markdown table, and SVG chart from stored result files. It does not
-  invent metrics.
+  invent metrics. Those files stay labeled single-seed.
+- `sagerec_multiseed.py` aggregates measured per-seed MF and GraphSAGE
+  ranking JSON into the ADR-007 leaderboard (per-seed rows, mean,
+  sample std, median). Default seed list is 7, 11, 13, 17, 19. It does
+  not invent metrics and does not overwrite Phase 5 files.
 - `sagerec_sampler_benchmark.py` times native
   `graph_sampler.sample_neighbors` against
   `sagerec_reference_sampler` (ADR-005). Parity is required before
@@ -122,6 +126,10 @@ samples.
   JSON; GraphSAGE 100K wiring still requires
   `NativeMinibatchSampler` and spies on native sampling. Do not add a
   live 100K quality-table job to default CI.
+- ADR-007 multi-seed aggregator: aggregation math, seed-list contract
+  (includes 7), schema, historical Phase 5 files still labeled
+  single-seed, and a tiny synthetic two-seed smoke. Do not download
+  MovieLens or run the 5-seed 100K job in default CI.
 - Phase 2 sampler timing: parity-before-timing, required JSON schema
   fields, and a tiny synthetic smoke. Do not assert machine-specific
   speedups. Do not download MovieLens in default CI.

@@ -15,6 +15,9 @@ GitHub Actions here must verify the native foundation without side effects.
   compiled `graph_sampler` extension and tiny synthetic graphs. Phase 5
   comparison-writer tests must use fixture JSON (or the committed MF
   result file) and must not download MovieLens or train 100K in CI.
+  ADR-007 multi-seed tests must use fixture JSON plus a tiny synthetic
+  two-seed smoke; they must not download MovieLens or run the 5-seed
+  100K leaderboard job.
   Phase 2 sampler-timing tests must use the tiny synthetic graph and
   must not time MovieLens 100K or assert machine-specific speedups.
   Default CI may install CPU-only PyTorch and `torch-geometric` for

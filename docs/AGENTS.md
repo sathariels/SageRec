@@ -10,8 +10,9 @@ decisions, evaluation protocol, and phased delivery plans.
 - Keep requirements testable and distinguish required, proposed, and accepted choices.
 - ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
   chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
-  (uniform sampling without replacement), and ADR-006 (PyG SAGEConv on
-  native neighborhoods) are accepted. Do not add MovieLens 1M, GCN, or
+  (uniform sampling without replacement), ADR-006 (PyG SAGEConv on
+  native neighborhoods), and ADR-007 (multi-seed MF vs GraphSAGE
+  leaderboard) are accepted. Do not add MovieLens 1M, GCN, or
   node2vec. Do not switch primary experiments to a PyG NeighborLoader.
 - Record consequential decisions with context, alternatives, rationale, and consequences.
 - Define metric and benchmark protocols before producing results.

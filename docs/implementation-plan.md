@@ -2,15 +2,18 @@
 
 ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
-(uniform sampling without replacement), and ADR-006 (PyG SAGEConv on
-native neighborhoods) are accepted. MovieLens 1M remains deferred. Phase 2
+(uniform sampling without replacement), ADR-006 (PyG SAGEConv on
+native neighborhoods), and ADR-007 (5-seed MF vs GraphSAGE leaderboard)
+are accepted. MovieLens 1M remains deferred. Phase 2
 download and on-disk `processed/` prep are open for MovieLens 100K. Phase 2
 timing charts are delivered (native vs Python reference sampler, stored
 JSON/SVG). Phase 4 GraphSAGE training on the native-backed mini-batch
 harness is delivered. Phase 5 is delivered for the single-seed 100K
-GraphSAGE run and GNN-versus-MF comparison (not a multi-seed leaderboard).
+GraphSAGE run and GNN-versus-MF comparison (historical single-seed
+provenance; not overwritten by later multi-seed artifacts).
 Phase 6 is delivered for PyG `SAGEConv` message passing still fed by
-`graph_sampler` / `sagerec_minibatch`.
+`graph_sampler` / `sagerec_minibatch`. Phase 7 is delivered for the
+5-seed MovieLens 100K MF vs GraphSAGE leaderboard with mean±std.
 
 ## Phase 1: Native foundation
 
@@ -175,9 +178,8 @@ Opened in the MovieLens 100K GraphSAGE quality slice:
   GraphSAGE files (no invented metrics).
 - Tests for comparison schema/protocol match and native 100K wiring.
 
-Still not started:
-
-- Multi-seed published leaderboard / uncertainty bars.
+Historical single-seed artifacts remain labeled as such. The multi-seed
+leaderboard is Phase 7 (`results/multiseed_gnn_vs_mf_movielens_100k.*`).
 
 Exit condition: stored 100K GraphSAGE metrics with provenance, comparison
 table/chart consistent with both result files, and CI green (CTest +
@@ -204,13 +206,39 @@ Opened in the PyG production-path slice (ADR-006):
 
 Still not started:
 
-- A measured MovieLens 100K quality rerun with SAGEConv (do not invent
-  or hand-edit `results/graphsage_movielens_100k.json` or the comparison
-  artifacts). Tiny synthetic metrics remain protocol smoke.
 - PyG NeighborLoader / ClusterLoader as a neighborhood source (rejected
   for primary experiments).
+
+The measured SAGEConv MovieLens 100K quality numbers live in the Phase 7
+multi-seed artifacts. Do not invent or hand-edit
+`results/graphsage_movielens_100k.json` or the Phase 5 comparison files.
+Tiny synthetic metrics remain protocol smoke.
 
 Exit condition: training path uses SAGEConv + native neighborhoods,
 harness tests prove the native sampler is called and NeighborLoader is
 not, docs/requirements match, and Release CTest / unittest / CI stay
 green on CPU.
+
+## Phase 7: Multi-seed MF vs GraphSAGE leaderboard
+
+Opened in the ADR-007 multi-seed slice:
+
+- Same seed list for implicit MF and GraphSAGE: **7, 11, 13, 17, 19**
+  (seed 7 kept for continuity with Phase 5).
+- Shared ADR-003 split, eligible users, candidate construction, and
+  Recall@10 / NDCG@10 via `PairScorer`.
+- GraphSAGE stays on PyG `SAGEConv` + native `sagerec_minibatch` /
+  `graph_sampler` (ADR-006). No NeighborLoader.
+- Aggregator `python/sagerec_multiseed.py` computes per-seed rows plus
+  mean, sample std (n-1), and median. Thin launcher
+  `scripts/run_multiseed_gnn_vs_mf.py` writes
+  `results/multiseed_gnn_vs_mf_movielens_100k.{json,md,svg}`.
+- Historical Phase 5 files are not overwritten and stay labeled
+  single-seed.
+- Tests cover aggregation math, schema, historical-file labels, native
+  wiring, and a tiny synthetic two-seed smoke. Default CI does not
+  download MovieLens or run the 100K multi-seed job.
+
+Exit condition: measured 5-seed JSON/markdown/SVG committed from a real
+run, docs record ADR-007, and the fast CI path stays green.
+

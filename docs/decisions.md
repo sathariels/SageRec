@@ -13,6 +13,7 @@ choice, alternatives, rationale, and consequences.
 | ADR-004 | Baseline | Matrix factorization / node2vec | Accepted: matrix factorization |
 | ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Accepted: uniform without replacement |
 | ADR-006 | GraphSAGE production stack | PyG SAGEConv on native samples / PyG NeighborLoader / in-repo mean layers | Accepted: PyG SAGEConv on native `graph_sampler` neighborhoods |
+| ADR-007 | Published quality comparison | Multi-seed MF vs GraphSAGE with uncertainty / keep Phase 5 single-seed only | Accepted: 5-seed MovieLens 100K leaderboard (seeds include 7) |
 
 ## Accepted
 
@@ -278,6 +279,56 @@ not.
   Tiny synthetic metrics remain protocol smoke.
 - MovieLens 1M, GCN, and node2vec remain deferred/rejected unless a
   superseding ADR accepts them.
+
+### ADR-007: Multi-seed published MF vs GraphSAGE comparison
+
+- Date: 2026-09-15
+- Owner: Nithilan Kumaran
+- Status: Accepted
+
+**Context:** Phase 5 stored a single-seed MovieLens 100K GraphSAGE vs implicit
+MF table and explicitly labeled it as not a leaderboard. Project requirements
+ask for uncertainty across multiple seeds or a clearly labeled single-seed
+result. The owner asked to run the multi-seed leaderboard slice on
+2026-09-15: MF vs GraphSAGE with uncertainty on MovieLens 100K / ADR-003
+only. Phase 6 already uses PyG `SAGEConv` fed by native `graph_sampler`.
+
+**Choice:** Publish a modest 5-seed MovieLens 100K comparison of implicit MF
+and GraphSAGE using the same seed list for both models:
+
+- Seeds: **7, 11, 13, 17, 19** (seed **7** is required for continuity with
+  the Phase 5 single-seed runs).
+- Split/eval: ADR-003 leave-one-out; shared `PairScorer` / Recall@10 /
+  NDCG@10 path; same eligible users and candidate construction.
+- GraphSAGE: current Phase 6 path — PyG `SAGEConv` on native
+  `graph_sampler` neighborhoods via `sagerec_minibatch`. Do not use
+  `NeighborLoader` / `ClusterLoader`.
+- Uncertainty: per-seed rows plus **mean ± sample standard deviation
+  (n-1)** (median also stored) for Recall@10 and NDCG@10.
+- Historical Phase 5 files (`results/mf_movielens_100k.json`,
+  `results/graphsage_movielens_100k.json`, `results/gnn_vs_mf_*`) remain
+  single-seed provenance and must not be retconned into multi-seed
+  artifacts. New filenames hold the leaderboard.
+
+**Alternatives:** Keep only the labeled single-seed table; run 10+ seeds;
+mix Phase 5 in-repo-mean GraphSAGE numbers with SAGEConv runs; change
+replacement policy or swap in a PyG sampler.
+
+**Rationale:** The owner accepted this slice on 2026-09-15. Five seeds
+including 7 are enough to show spread on CPU without a huge job, keep the
+Phase 5 continuity seed, and avoid inventing or mixing protocols.
+
+**Consequences:**
+
+- `python/sagerec_multiseed.py` aggregates measured per-seed ranking JSON
+  with the same protocol checks as `sagerec_compare.py`.
+- `scripts/run_multiseed_gnn_vs_mf.py` trains both models across the seed
+  list and writes `results/multiseed_gnn_vs_mf_movielens_100k.{json,md,svg}`.
+- Fairness is the shared eval protocol. MF remains 1 SGD epoch; GraphSAGE
+  remains 3 Adam epochs unless a later measured config change is stored.
+- Default CI must not download MovieLens or run the 100K multi-seed job.
+- Do not add MovieLens 1M, GCN, node2vec, or NeighborLoader on the
+  primary path.
 
 ## Proposals
 

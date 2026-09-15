@@ -4,7 +4,7 @@
 
 SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, and GraphSAGE training on that harness (PyG `SAGEConv`, native neighborhoods).
 
-GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Phase 6 uses PyG `SAGEConv` for message passing while neighborhoods still come from the native sampler. Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
+GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Phase 6 uses PyG `SAGEConv` for message passing while neighborhoods still come from the native sampler. Phase 7 stores a **5-seed MF vs GraphSAGE leaderboard** with mean±sample-std under [`results/multiseed_gnn_vs_mf_movielens_100k.json`](results/multiseed_gnn_vs_mf_movielens_100k.json). Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -14,8 +14,8 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | --- | --- |
 | C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | PyG NeighborLoader / ClusterLoader (rejected for primary experiments) |
 | MovieLens 100K in-memory `u.data` parser | Production serving |
-| Official 100K download + on-disk `data/processed/` prep | Multi-seed published leaderboard |
-| Native-backed mini-batch neighborhood helper | Measured SAGEConv 100K rerun (Phase 5 JSON stays as measured) |
+| Official 100K download + on-disk `data/processed/` prep | |
+| Native-backed mini-batch neighborhood helper | |
 | GraphSAGE training on native samples (CPU PyTorch Geometric `SAGEConv`) | |
 | pybind11 `graph_sampler` bindings | |
 | Python reference sampler + native parity tests | |
@@ -25,10 +25,11 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | Single-seed MovieLens 100K MF metrics in [`results/mf_movielens_100k.json`](results/mf_movielens_100k.json) | |
 | Single-seed MovieLens 100K GraphSAGE metrics in [`results/graphsage_movielens_100k.json`](results/graphsage_movielens_100k.json) | |
 | GNN-versus-MF comparison JSON, markdown table, and SVG chart | |
+| 5-seed MF vs GraphSAGE leaderboard ([`results/multiseed_gnn_vs_mf_movielens_100k.json`](results/multiseed_gnn_vs_mf_movielens_100k.json)) | |
 | C++ vs Python reference sampler timing JSON, markdown, and SVG | |
 | Release CMake build + GitHub Actions CI | |
 
-The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF and GraphSAGE metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). Each file is a **single-seed** 100K run, not a published multi-seed leaderboard. The MF JSON is not a GraphSAGE result.
+The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF and GraphSAGE metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). Phase 5 files are **single-seed** historical provenance. The ADR-007 leaderboard is a separate 5-seed SAGEConv measurement with mean±sample std. The MF JSON is not a GraphSAGE result.
 
 ## Why this project
 
@@ -42,7 +43,7 @@ The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatc
 
 ## Architecture
 
-Intended system. Solid arrows are implemented. The Phase 5 100K comparison table/chart is implemented from stored MF and GraphSAGE result files. The Phase 2 sampler timing chart is generated from measured native vs Python reference timings.
+Intended system. Solid arrows are implemented. The Phase 5 100K comparison table/chart is implemented from stored MF and GraphSAGE result files. The ADR-007 multi-seed leaderboard reuses that protocol across five seeds. The Phase 2 sampler timing chart is generated from measured native vs Python reference timings.
 
 ```mermaid
 flowchart LR
@@ -79,11 +80,12 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
 | GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — PyG `SAGEConv` + `PairScorer` on native samples |
 | Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
+| Multi-seed aggregator | [`python/sagerec_multiseed.py`](python/sagerec_multiseed.py) — per-seed rows plus mean±sample std (ADR-007) |
 | Sampler timing | [`python/sagerec_sampler_benchmark.py`](python/sagerec_sampler_benchmark.py) — native vs reference `sample_neighbors` JSON/SVG |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/comparison/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed launchers.
 
 ## MovieLens 100K download and prep
 
@@ -128,7 +130,31 @@ Single-seed test-split numbers copied from those files (seed 7, 943 users):
 | implicit MF | 1 SGD | 0.038176 | 0.020303 |
 | GraphSAGE | 3 Adam | 0.047720 | 0.020969 |
 
-This is not a multi-seed leaderboard and not a production-quality claim. The GraphSAGE row is the stored Phase 5 run (in-repo mean layers); it is not a new SAGEConv 100K measurement.
+This is historical **single-seed** provenance, not the published multi-seed leaderboard, and not a production-quality claim. The GraphSAGE row is the stored Phase 5 run (in-repo mean layers); it is not a SAGEConv 100K measurement. Do not retcon these files.
+
+## MovieLens 100K multi-seed MF vs GraphSAGE leaderboard
+
+ADR-007 publishes uncertainty on the **same** split, eligible users, candidate protocol, and Recall@10 / NDCG@10 as Phase 5. Both models use seeds **7, 11, 13, 17, 19** (seed 7 kept for continuity). GraphSAGE is the current Phase 6 path: PyG `SAGEConv` on native `graph_sampler` neighborhoods via `sagerec_minibatch` (not a NeighborLoader). MF is still **1 SGD epoch**; GraphSAGE is still **3 Adam epochs**. Fairness is the shared eval protocol, not matched wall-clock or optimizer budget.
+
+```bash
+PYTHONPATH=build:python python3 scripts/run_multiseed_gnn_vs_mf.py \
+  --processed-dir data/processed --raw-dir data/raw
+```
+
+Default CI does **not** run that 100K job. Outputs (measured, not invented):
+
+- [`results/multiseed_gnn_vs_mf_movielens_100k.json`](results/multiseed_gnn_vs_mf_movielens_100k.json)
+- [`results/multiseed_gnn_vs_mf_movielens_100k.md`](results/multiseed_gnn_vs_mf_movielens_100k.md)
+- [`results/multiseed_gnn_vs_mf_movielens_100k.svg`](results/multiseed_gnn_vs_mf_movielens_100k.svg)
+
+Copied from the stored JSON (seeds 7, 11, 13, 17, 19; 943 eligible users; mean ± sample std, n-1):
+
+| Model | Epochs | Recall@10 mean±std | Recall@10 median | NDCG@10 mean±std | NDCG@10 median |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| implicit MF | 1 SGD | 0.039024 ± 0.006848 | 0.038176 | 0.020082 ± 0.002658 | 0.020303 |
+| GraphSAGE | 3 Adam | 0.044963 ± 0.007742 | 0.042418 | 0.020948 ± 0.005239 | 0.020354 |
+
+This is not a SOTA claim. GraphSAGE is PyG `SAGEConv` on native `graph_sampler` neighborhoods. Phase 5 single-seed JSONs were not overwritten; seed-7 MF here matches that historical MF run, while seed-7 GraphSAGE is a new SAGEConv measurement (not the Phase 5 in-repo mean-layer number).
 
 ## Native vs Python reference sampler timing
 
@@ -167,6 +193,7 @@ Recorded in [`docs/decisions.md`](docs/decisions.md):
 | ADR-004 | Accepted | Implicit-feedback matrix factorization (not node2vec) |
 | ADR-005 | Accepted | Uniform sampling without replacement |
 | ADR-006 | Accepted | PyG `SAGEConv` on native `graph_sampler` neighborhoods (not NeighborLoader) |
+| ADR-007 | Accepted | 5-seed MovieLens 100K MF vs GraphSAGE leaderboard (seeds 7, 11, 13, 17, 19) |
 
 The native and Python reference samplers implement ADR-005 (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). Changing replacement policy requires a superseding ADR.
 
@@ -189,7 +216,7 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity). After a successful build:
+CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation). After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
@@ -198,6 +225,7 @@ PYTHONPATH=build:python python3 -m unittest python/tests/test_minibatch_native.p
 PYTHONPATH=build:python python3 -m unittest python/tests/test_graphsage_train.py -v
 PYTHONPATH=build:python python3 scripts/run_graphsage_synthetic_smoke.py
 PYTHONPATH=build:python python3 -m unittest python/tests/test_gnn_vs_mf_compare.py -v
+PYTHONPATH=build:python python3 -m unittest python/tests/test_multiseed_gnn_vs_mf.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_sampler_benchmark.py -v
 ```
 
@@ -209,9 +237,10 @@ Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only 
 
 - No production users, no invented metrics, and no production-latency or SOTA speedup claims.
 - Tiny synthetic MF and GraphSAGE smokes are protocol verification, not MovieLens 100K evaluation.
-- A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE and not a multi-seed leaderboard.
-- A single-seed 100K GraphSAGE run is recorded under `results/graphsage_movielens_100k.json`. Neighborhoods come from `graph_sampler` via `sagerec_minibatch`, not a PyG NeighborLoader. Those stored numbers were measured with the Phase 5 in-repo mean layers; Phase 6 does not retcon them as a SAGEConv 100K rerun.
+- A single-seed 100K MF run is recorded under `results/mf_movielens_100k.json`. It is not GraphSAGE. It remains Phase 5 single-seed provenance.
+- A single-seed 100K GraphSAGE run is recorded under `results/graphsage_movielens_100k.json`. Neighborhoods come from `graph_sampler` via `sagerec_minibatch`, not a PyG NeighborLoader. Those stored numbers were measured with the Phase 5 in-repo mean layers; they are not a SAGEConv 100K rerun.
 - The Phase 5 comparison table/chart is generated from those two JSON files.
+- The ADR-007 5-seed SAGEConv leaderboard is stored under `results/multiseed_gnn_vs_mf_movielens_100k.json` (mean ± sample std). It does not overwrite the Phase 5 files. It is not a SOTA claim.
 - Native vs Python reference sampler timings are stored under `results/sampler_timing.json` (synthetic graph, median of measured repetitions). They are one-machine evidence, not a production latency or SOTA claim.
 - Production message passing is PyG `SAGEConv` on native mini-batches (ADR-006). PyG NeighborLoader is not the neighborhood source.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
