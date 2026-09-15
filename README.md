@@ -209,7 +209,7 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity). After a successful build:
+CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation). After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
