@@ -56,7 +56,9 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
   training smoke (CPU PyTorch + PyG SAGEConv; native `sample_neighbors`
   on the training path; NeighborLoader forbidden), Phase 5
   comparison-writer / 100K-wiring tests
-  (fixture JSON + tiny synthetic graphs; no live 100K download), and
+  (fixture JSON + tiny synthetic graphs; no live 100K download),
+  ADR-007 multi-seed aggregation tests (fixture JSON + tiny synthetic
+  two-seed smoke; no MovieLens download), and
   Phase 2 sampler-timing tests (parity-before-timing + JSON schema on a
   tiny synthetic graph; no MovieLens download, no speedup thresholds).
   PYTHONPATH includes the build directory and `python/` so `sagerec_*`

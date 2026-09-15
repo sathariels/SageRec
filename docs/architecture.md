@@ -222,7 +222,9 @@ does not use a PyG NeighborLoader.
    quality run uses the same evaluator on the ADR-003 test split.
 8. Compare stored MF and GraphSAGE result JSONs with
    `python/sagerec_compare.py` (same split, eligible users, candidate
-   protocol, and metrics).
+   protocol, and metrics). The ADR-007 multi-seed leaderboard reuses
+   that protocol across seeds 7, 11, 13, 17, and 19 via
+   `python/sagerec_multiseed.py`.
 
 The GNN family is GraphSAGE (ADR-002). Production message passing is PyG
 `SAGEConv` (ADR-006) on CPU, still fed by native samples. Ranking on 100K
@@ -271,9 +273,10 @@ The shared protocol for this slice:
 - Report Recall@10 and NDCG@10 per user, then macro-average.
 - Tiny synthetic unittest metrics are protocol verification, not a
   MovieLens 100K quality claim. Stored 100K numbers live under `results/`
-  with provenance (`mf_movielens_100k.json`,
-  `graphsage_movielens_100k.json`, and the generated comparison
-  artifacts).
+  with provenance. Phase 5 single-seed files are
+  `mf_movielens_100k.json`, `graphsage_movielens_100k.json`, and
+  `gnn_vs_mf_movielens_100k.*`. The ADR-007 multi-seed mean±std
+  leaderboard is `multiseed_gnn_vs_mf_movielens_100k.{json,md,svg}`.
 
 ## Benchmark boundary
 

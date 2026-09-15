@@ -12,6 +12,11 @@ Machine-readable run summaries belong here.
 - `gnn_vs_mf_movielens_100k.json`, `.md`, and `.svg` are the Phase 5
   comparison artifacts. Values are copied from the two result files.
 
+- `multiseed_gnn_vs_mf_movielens_100k.json`, `.md`, and `.svg` are the
+  ADR-007 5-seed leaderboard (seeds 7, 11, 13, 17, 19). Values are
+  measured per-seed then aggregated (mean ± sample std). Do not mix
+  these with the Phase 5 single-seed files or invent numbers.
+
 - `sampler_timing.json`, `.md`, and `.svg` are the Phase 2 native vs
   Python reference neighbor-sampler timings on a deterministic synthetic
   graph (ADR-005 without replacement). Values are measured, not invented.

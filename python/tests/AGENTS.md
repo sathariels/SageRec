@@ -40,6 +40,10 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   fixture JSON (no invented 100K numbers). Cover GraphSAGE 100K wiring:
   `movielens_100k_config` seed 7, native `NativeMinibatchSampler`
   requirement, and a native `sample_neighbors` spy on eval materialize.
+- Cover ADR-007 multi-seed aggregation math / schema, the seed list
+  (must include 7), historical Phase 5 files still labeled single-seed,
+  and a tiny synthetic two-seed smoke. Do not download MovieLens or run
+  the 100K multi-seed job in default CI.
 - Cover Phase 2 sampler timing: native/reference parity must hold
   before any timed repetition; the timing writer emits required schema
   fields (graph size, workload, k, replacement policy, seed, build

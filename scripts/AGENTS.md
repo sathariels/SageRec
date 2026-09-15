@@ -33,6 +33,14 @@ Opened Phase 5 100K GraphSAGE + comparison:
   write comparison JSON, markdown table, and SVG chart. Does not invent
   metrics.
 
+Opened Phase 7 multi-seed leaderboard (ADR-007):
+
+- `run_multiseed_gnn_vs_mf.py` — download/prep if needed, train implicit
+  MF and native-backed GraphSAGE (PyG SAGEConv) across seeds 7, 11, 13,
+  17, 19, write `results/multiseed_gnn_vs_mf_movielens_100k.{json,md,svg}`.
+  Does not overwrite Phase 5 single-seed files. Do not run this 100K job
+  in default CI.
+
 Opened Phase 2 sampler timing:
 
 - `run_sampler_timing.py` — verify native/reference `sample_neighbors`

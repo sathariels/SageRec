@@ -31,10 +31,13 @@ native mini-batch harness (the Python training data path must call
 `graph_sampler` / `sagerec_minibatch`; do not silently use a PyG
 NeighborLoader). Phase 5 is delivered for the single-seed MovieLens 100K
 GraphSAGE quality run and the GNN-versus-MF comparison table/chart under
-`results/`. Phase 6 is delivered for PyG `SAGEConv` message passing still
-fed by native sampling. Tiny synthetic GraphSAGE metrics remain protocol
-smoke and must stay separate from the stored 100K numbers. Do not add
-MovieLens 1M or GCN paths. Do not invent metrics or hand-edit timings.
+`results/` (historical single-seed provenance; do not retcon). Phase 6 is
+delivered for PyG `SAGEConv` message passing still fed by native sampling.
+Phase 7 is delivered for the 5-seed MovieLens 100K MF vs GraphSAGE
+leaderboard with mean±sample-std (`results/multiseed_gnn_vs_mf_movielens_100k.*`).
+Tiny synthetic GraphSAGE metrics remain protocol smoke and must stay
+separate from the stored 100K numbers. Do not add MovieLens 1M or GCN
+paths. Do not invent metrics or hand-edit timings.
 
 ## Read order
 
@@ -63,6 +66,8 @@ Accepted and recorded in `docs/decisions.md`:
   superseding ADR).
 - ADR-006: PyG `SAGEConv` on native `graph_sampler` neighborhoods (not a PyG
   NeighborLoader).
+- ADR-007: Multi-seed published MF vs GraphSAGE comparison on MovieLens
+  100K (seeds 7, 11, 13, 17, 19; mean ± sample std).
 
 Do not add node2vec unless a superseding ADR accepts it.
 
