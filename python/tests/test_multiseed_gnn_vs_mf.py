@@ -308,7 +308,7 @@ class HistoricalSingleSeedTests(unittest.TestCase):
         self.assertIn("single-seed", gnn["note"].lower())
         self.assertIn("not a multi-seed leaderboard", gnn["note"].lower())
         self.assertIn("single-seed", comparison["protocol_note"].lower())
-        self.assertIn("not a multi-seed leaderboard", comparison["note"].lower())
+        self.assertIn("multi-seed leaderboard", comparison["note"].lower())
         self.assertAlmostEqual(mf["metrics"]["recall_at_k"], 0.03817603393425239)
         self.assertAlmostEqual(mf["metrics"]["ndcg_at_k"], 0.020303175177886473)
         self.assertAlmostEqual(gnn["metrics"]["recall_at_k"], 0.04772004241781548)

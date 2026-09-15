@@ -130,12 +130,15 @@ def assert_shared_protocol_across_seeds(
     first_mf, first_gnn = pairs[0]
     for index, (mf, gnn) in enumerate(pairs):
         seed = seeds[index]
-        compare.assert_comparable(
-            mf,
-            gnn,
-            mf_path=f"mf seed {seed}",
-            gnn_path=f"graphsage seed {seed}",
-        )
+        try:
+            compare.assert_comparable(
+                mf,
+                gnn,
+                mf_path=f"mf seed {seed}",
+                gnn_path=f"graphsage seed {seed}",
+            )
+        except compare.ComparisonError as exc:
+            raise MultiseedError(str(exc)) from exc
         if mf.get("seed") != seed or gnn.get("seed") != seed:
             raise MultiseedError(
                 f"seed mismatch at index {index}: expected {seed}, "
@@ -714,9 +717,12 @@ def maybe_load_completed_pair(
     if not mf_path.is_file() or not gnn_path.is_file():
         return None
     mf, gnn = load_seed_pair(mf_path, gnn_path)
-    compare.assert_comparable(
-        mf, gnn, mf_path=mf_path, gnn_path=gnn_path
-    )
+    try:
+        compare.assert_comparable(
+            mf, gnn, mf_path=mf_path, gnn_path=gnn_path
+        )
+    except compare.ComparisonError as exc:
+        raise MultiseedError(str(exc)) from exc
     if mf.get("seed") != seed or gnn.get("seed") != seed:
         raise MultiseedError(
             f"resume files for seed {seed} have MF seed {mf.get('seed')!r} "
