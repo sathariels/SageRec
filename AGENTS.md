@@ -12,19 +12,21 @@ and an agent-friendly repository.
 Phase 1 native foundation is verified. ADR-001 (MovieLens 100K), ADR-002
 (GraphSAGE), ADR-003 (per-user chronological leave-one-out), ADR-004
 (matrix factorization), ADR-005 (uniform sampling without replacement),
-and ADR-006 (PyG SAGEConv on native `graph_sampler` neighborhoods) are
-accepted; MovieLens 1M is deferred. The verified slice includes the C++
-CSR graph, seeded neighbor sampler, MovieLens 100K `u.data` parser,
-`graph_sampler` bindings, a naive Python reference sampler with native
-parity tests, ADR-003 leave-one-out prep, MovieLens 100K download and
-on-disk `processed/` writes, an implicit MF baseline, a shared ranking
-evaluator, a native-backed mini-batch neighborhood helper, GraphSAGE
-training on that harness (PyG `SAGEConv`, native neighborhoods), and CI.
+ADR-006 (PyG SAGEConv on native `graph_sampler` neighborhoods), and
+ADR-007 (multi-seed MF vs GraphSAGE leaderboard) are accepted; MovieLens
+1M is deferred. The verified slice includes the C++ CSR graph, seeded
+neighbor sampler, MovieLens 100K `u.data` parser, `graph_sampler`
+bindings, a naive Python reference sampler with native parity tests,
+ADR-003 leave-one-out prep, MovieLens 100K download and on-disk
+`processed/` writes, an implicit MF baseline, a shared ranking evaluator,
+a native-backed mini-batch neighborhood helper, GraphSAGE training on
+that harness (PyG `SAGEConv`, native neighborhoods), and CI.
 
-Phase 2 download + on-disk `processed/` prep is open for MovieLens 100K.
-Phase 2 timing charts are delivered: native `graph_sampler` versus the
-Python reference sampler, with stored JSON/SVG under `results/` (synthetic
-graph by default; optional train-only 100K is a script flag). Phase 3 is
+The current verified tip is Phase 7 / ADR-007. Phase 2 is delivered for
+MovieLens 100K: download + on-disk `processed/` prep, and timing charts
+(native `graph_sampler` versus the Python reference sampler, with stored
+JSON/SVG under `results/`; synthetic graph by default; optional
+train-only 100K is a script flag). Phase 3 is
 delivered for the matrix-factorization baseline and the shared Recall@10 /
 NDCG@10 evaluator. Phase 4 is delivered for GraphSAGE training on the
 native mini-batch harness (the Python training data path must call

@@ -4,9 +4,9 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
 (uniform sampling without replacement), ADR-006 (PyG SAGEConv on
 native neighborhoods), and ADR-007 (5-seed MF vs GraphSAGE leaderboard)
-are accepted. MovieLens 1M remains deferred. Phase 2
-download and on-disk `processed/` prep are open for MovieLens 100K. Phase 2
-timing charts are delivered (native vs Python reference sampler, stored
+are accepted. MovieLens 1M remains deferred. Phase 2 is
+delivered/complete for MovieLens 100K: download and on-disk `processed/`
+prep, and timing charts (native vs Python reference sampler, stored
 JSON/SVG). Phase 4 GraphSAGE training on the native-backed mini-batch
 harness is delivered. Phase 5 is delivered for the single-seed 100K
 GraphSAGE run and GNN-versus-MF comparison (historical single-seed
@@ -58,7 +58,7 @@ Opened in the reference-sampler slice:
   unbiased `uniform_below`).
 - Unittest parity cases against compiled `graph_sampler` on synthetic graphs.
 
-Opened in the ADR-003 split/prep slice (Phase 2 is not complete):
+Opened in the ADR-003 split/prep slice:
 
 - In-memory leave-one-out assignment in `python/sagerec_prep.py` from
   already-normalized 100K interactions.
