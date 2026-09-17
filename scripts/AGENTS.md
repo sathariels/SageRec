@@ -49,8 +49,16 @@ Opened Phase 2 sampler timing:
   deterministic synthetic graph. `--source movielens-100k` uses existing
   train-only `processed/` artifacts and never downloads.
 
+Opened Phase 8 demo CLI (ADR-008):
+
+- `demo_recommend.py` — load a schema-v1 checkpoint, score
+  `--candidates` for `--user`, print top-K. Delegates to
+  `python/sagerec_serve.py`. Does not download MovieLens, start HTTP,
+  or export a batch.
+
 Do not add MovieLens 1M scripts. The Phase 4 mini-batch helper lives in
 `python/sagerec_minibatch.py`. GraphSAGE training lives in
 `python/sagerec_graphsage.py` (Phase 6: PyG SAGEConv, native
 neighborhoods). Sampler timing logic lives in
-`python/sagerec_sampler_benchmark.py`.
+`python/sagerec_sampler_benchmark.py`. Demo serving lives in
+`python/sagerec_serve.py`.

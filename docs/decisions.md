@@ -14,6 +14,7 @@ choice, alternatives, rationale, and consequences.
 | ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Accepted: uniform without replacement |
 | ADR-006 | GraphSAGE production stack | PyG SAGEConv on native samples / PyG NeighborLoader / in-repo mean layers | Accepted: PyG SAGEConv on native `graph_sampler` neighborhoods |
 | ADR-007 | Published quality comparison | Multi-seed MF vs GraphSAGE with uncertainty / keep Phase 5 single-seed only | Accepted: 5-seed MovieLens 100K leaderboard (seeds include 7) |
+| ADR-008 | Production serving demo | Demo CLI / batch export / local HTTP API | Accepted: Demo CLI (load checkpoint, score candidates, print top-K) |
 
 ## Accepted
 
@@ -329,6 +330,53 @@ Phase 5 continuity seed, and avoid inventing or mixing protocols.
 - Default CI must not download MovieLens or run the 100K multi-seed job.
 - Do not add MovieLens 1M, GCN, node2vec, or NeighborLoader on the
   primary path.
+
+### ADR-008: Demo CLI serving
+
+- Date: 2026-09-17
+- Owner: Nithilan Kumaran
+- Status: Accepted
+
+**Context:** Phases 1–7 deliver native sampling, GraphSAGE training (PyG
+`SAGEConv` on `graph_sampler` neighborhoods), implicit MF, and stored
+MovieLens 100K ranking evidence. The remaining production-shaped slice is
+how a trained model is *used*: score candidates for one user and print
+top-K. The allowed serving shapes were a demo CLI, a batch export job,
+or a local HTTP API. MovieLens 100K (ADR-001), GraphSAGE (ADR-002),
+ADR-003 splits, implicit MF (ADR-004), without-replacement sampling
+(ADR-005), native neighborhoods (ADR-006), and the multi-seed
+leaderboard (ADR-007) stay locked.
+
+**Choice:** A **demo CLI** that loads a GraphSAGE (or PairScorer-compatible
+implicit-MF) checkpoint from disk, scores caller-supplied candidate movie
+IDs for one user, and prints top-K (default 10) as `rank`, `movie_id`,
+`score`. Ranking is score descending; ties break on smaller `movie_id`.
+
+**Alternatives:** Batch export of scores for every eligible user; a local
+HTTP recommend API.
+
+**Rationale:** The owner accepted a demo CLI on 2026-09-17. A CLI keeps
+the contract testable in default CI (synthetic checkpoints, no MovieLens
+download, no network server) and reuses `PairScorer` plus native
+mini-batch neighborhoods instead of standing up a second serving stack.
+Batch export and HTTP are useful later, but they add job/API surface
+without proving checkpoint load or ranking correctness first.
+
+**Consequences:**
+
+- `python/sagerec_serve.py` owns checkpoint schema v1
+  (`sagerec_checkpoint`), load/save, candidate ranking, and CLI logic.
+  `scripts/demo_recommend.py` is a thin launcher (`--checkpoint`,
+  `--user`, `--candidates`, `--k`).
+- GraphSAGE serve-time neighborhoods still come from native
+  `graph_sampler` via `sagerec_minibatch`. Do not use `NeighborLoader` /
+  `ClusterLoader`. Train-only pairs are required to rebuild that CSR
+  (embedded in the checkpoint, or `--train-pairs` / `--processed-dir`).
+  The CLI must not download MovieLens by default.
+- Missing or corrupt checkpoints fail with an actionable nonzero exit.
+- Do not add batch export or a local HTTP API unless a superseding ADR
+  accepts them. Do not invent or edit stored 100K quality result files.
+- MovieLens 1M, GCN, and node2vec remain deferred/rejected.
 
 ## Proposals
 

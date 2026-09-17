@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/sathariels/SageRec/actions/workflows/ci.yml/badge.svg)](https://github.com/sathariels/SageRec/actions/workflows/ci.yml)
 
-SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, and GraphSAGE training on that harness (PyG `SAGEConv`, native neighborhoods).
+SageRec is a MovieLens recommender whose systems core is a **C++17 bipartite CSR graph** and **seeded neighbor sampler**, exposed to Python as the pybind11 module `graph_sampler`. Python owns leakage-safe leave-one-out prep, MovieLens 100K download / on-disk prep, an implicit matrix-factorization baseline, a shared Recall@10 / NDCG@10 evaluator, a native-backed mini-batch neighborhood helper, GraphSAGE training on that harness (PyG `SAGEConv`, native neighborhoods), and an ADR-008 demo CLI that loads a checkpoint and prints top-K.
 
-GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Phase 6 uses PyG `SAGEConv` for message passing while neighborhoods still come from the native sampler. Phase 7 stores a **5-seed MF vs GraphSAGE leaderboard** with mean±sample-std under [`results/multiseed_gnn_vs_mf_movielens_100k.json`](results/multiseed_gnn_vs_mf_movielens_100k.json). Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
+GraphSAGE is the accepted GNN direction. Phase 4 trains GraphSAGE on the native mini-batch harness (Python calls `graph_sampler` / `sagerec_minibatch`; not a PyG NeighborLoader). Phase 5 stores a **single-seed MovieLens 100K GraphSAGE quality run** and an honest **GNN-versus-MF** table/chart under [`results/`](results/). Phase 6 uses PyG `SAGEConv` for message passing while neighborhoods still come from the native sampler. Phase 7 stores a **5-seed MF vs GraphSAGE leaderboard** with mean±sample-std under [`results/multiseed_gnn_vs_mf_movielens_100k.json`](results/multiseed_gnn_vs_mf_movielens_100k.json). Phase 8 is a **demo CLI** that loads a GraphSAGE or PairScorer-compatible checkpoint, scores candidate movie IDs for one user, and prints top-K. Tiny synthetic GraphSAGE metrics remain protocol smoke and are not those 100K numbers.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -13,10 +13,11 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 | Built | Not yet |
 | --- | --- |
 | C++ bipartite CSR + seeded neighbor sampler (ADR-005 without replacement) | PyG NeighborLoader / ClusterLoader (rejected for primary experiments) |
-| MovieLens 100K in-memory `u.data` parser | Production serving |
+| MovieLens 100K in-memory `u.data` parser | Batch export / local HTTP API (rejected unless a superseding ADR) |
 | Official 100K download + on-disk `data/processed/` prep | |
 | Native-backed mini-batch neighborhood helper | |
 | GraphSAGE training on native samples (CPU PyTorch Geometric `SAGEConv`) | |
+| Demo CLI: load checkpoint, score candidates, print top-K (ADR-008) | |
 | pybind11 `graph_sampler` bindings | |
 | Python reference sampler + native parity tests | |
 | ADR-003 leave-one-out split/prep (in-memory and on-disk) | |
@@ -56,6 +57,8 @@ flowchart LR
     B --> H[MF baseline]
     G --> I[Recall@10 and NDCG@10]
     H --> I
+    G --> K[Demo CLI top-K]
+    H --> K
     D --> J[C++ vs Python timing charts]
     D --> R[Python reference sampler]
 ```
@@ -79,13 +82,14 @@ Users and movies are distinct node types in one bipartite graph. Each training i
 | Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10 |
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
 | GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — PyG `SAGEConv` + `PairScorer` on native samples |
+| Demo CLI | [`python/sagerec_serve.py`](python/sagerec_serve.py) — schema-v1 checkpoint load, candidate scores, top-K print (ADR-008) |
 | Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
 | Multi-seed aggregator | [`python/sagerec_multiseed.py`](python/sagerec_multiseed.py) — per-seed rows plus mean±sample std (ADR-007) |
 | Sampler timing | [`python/sagerec_sampler_benchmark.py`](python/sagerec_sampler_benchmark.py) — native vs reference `sample_neighbors` JSON/SVG |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/serve/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed/demo-CLI launchers.
 
 ## MovieLens 100K download and prep
 
@@ -181,6 +185,29 @@ Copied from the stored JSON (Release, GNU 13.3.0, Python 3.12.3, 4-way Xeon; see
 
 Median speedup (reference / native): **111.177×**. This is one-machine sampler evidence, not a production latency or SOTA claim.
 
+## Demo CLI (ADR-008)
+
+Load a schema-v1 `sagerec_checkpoint`, score caller-supplied candidate movie IDs for one user, and print top-K. Ranking is **score descending**; ties break on **smaller `movie_id`**. GraphSAGE serve-time neighborhoods still come from native `graph_sampler` via `sagerec_minibatch` (not a NeighborLoader). The CLI does **not** download MovieLens, export a batch, or start an HTTP server.
+
+Save a checkpoint after training (synthetic example; 100K weights are gitignored):
+
+```python
+import sagerec_serve as serve
+serve.save_checkpoint("results/checkpoints/graphsage.pt", model)
+```
+
+Then:
+
+```bash
+PYTHONPATH=build:python python3 scripts/demo_recommend.py \
+  --checkpoint results/checkpoints/graphsage.pt \
+  --user 0 \
+  --candidates 1,2,3,4,5 \
+  --k 10
+```
+
+Stdout is a TSV table: `rank`, `movie_id`, `score`. GraphSAGE checkpoints embed train-only pairs so the native CSR can be rebuilt. If those pairs are omitted, pass `--train-pairs path.json` or `--processed-dir data/processed` (existing artifacts only). Missing or corrupt checkpoints exit nonzero with an actionable error.
+
 ## Owner decisions
 
 Recorded in [`docs/decisions.md`](docs/decisions.md):
@@ -194,6 +221,7 @@ Recorded in [`docs/decisions.md`](docs/decisions.md):
 | ADR-005 | Accepted | Uniform sampling without replacement |
 | ADR-006 | Accepted | PyG `SAGEConv` on native `graph_sampler` neighborhoods (not NeighborLoader) |
 | ADR-007 | Accepted | 5-seed MovieLens 100K MF vs GraphSAGE leaderboard (seeds 7, 11, 13, 17, 19) |
+| ADR-008 | Accepted | Demo CLI (load checkpoint, score candidates, print top-K); not batch export or HTTP |
 
 The native and Python reference samplers implement ADR-005 (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). Changing replacement policy requires a superseding ADR.
 
@@ -216,7 +244,7 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation). After a successful build:
+CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation, demo-CLI checkpoint/top-K). After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
@@ -227,6 +255,7 @@ PYTHONPATH=build:python python3 scripts/run_graphsage_synthetic_smoke.py
 PYTHONPATH=build:python python3 -m unittest python/tests/test_gnn_vs_mf_compare.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_multiseed_gnn_vs_mf.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_sampler_benchmark.py -v
+PYTHONPATH=build:python python3 -m unittest python/tests/test_serve_demo.py -v
 ```
 
 Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
@@ -243,6 +272,7 @@ Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only 
 - The ADR-007 5-seed SAGEConv leaderboard is stored under `results/multiseed_gnn_vs_mf_movielens_100k.json` (mean ± sample std). It does not overwrite the Phase 5 files. It is not a SOTA claim.
 - Native vs Python reference sampler timings are stored under `results/sampler_timing.json` (synthetic graph, median of measured repetitions). They are one-machine evidence, not a production latency or SOTA claim.
 - Production message passing is PyG `SAGEConv` on native mini-batches (ADR-006). PyG NeighborLoader is not the neighborhood source.
+- The ADR-008 demo CLI loads a local checkpoint and prints top-K; it is not an HTTP API, not a batch exporter, and not a production latency claim.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.

@@ -12,9 +12,9 @@ and an agent-friendly repository.
 Phase 1 native foundation is verified. ADR-001 (MovieLens 100K), ADR-002
 (GraphSAGE), ADR-003 (per-user chronological leave-one-out), ADR-004
 (matrix factorization), ADR-005 (uniform sampling without replacement),
-ADR-006 (PyG SAGEConv on native `graph_sampler` neighborhoods), and
-ADR-007 (multi-seed MF vs GraphSAGE leaderboard) are accepted; MovieLens
-1M is deferred. The verified slice includes the C++ CSR graph, seeded
+ADR-006 (PyG SAGEConv on native `graph_sampler` neighborhoods),
+ADR-007 (multi-seed MF vs GraphSAGE leaderboard), and ADR-008 (demo CLI
+serving) are accepted; MovieLens 1M is deferred. The verified slice includes the C++ CSR graph, seeded
 neighbor sampler, MovieLens 100K `u.data` parser, `graph_sampler`
 bindings, a naive Python reference sampler with native parity tests,
 ADR-003 leave-one-out prep, MovieLens 100K download and on-disk
@@ -22,7 +22,7 @@ ADR-003 leave-one-out prep, MovieLens 100K download and on-disk
 a native-backed mini-batch neighborhood helper, GraphSAGE training on
 that harness (PyG `SAGEConv`, native neighborhoods), and CI.
 
-The current verified tip is Phase 7 / ADR-007. Phase 2 is delivered for
+The current verified tip is Phase 8 / ADR-008. Phase 2 is delivered for
 MovieLens 100K: download + on-disk `processed/` prep, and timing charts
 (native `graph_sampler` versus the Python reference sampler, with stored
 JSON/SVG under `results/`; synthetic graph by default; optional
@@ -37,8 +37,11 @@ GraphSAGE quality run and the GNN-versus-MF comparison table/chart under
 delivered for PyG `SAGEConv` message passing still fed by native sampling.
 Phase 7 is delivered for the 5-seed MovieLens 100K MF vs GraphSAGE
 leaderboard with mean±sample-std (`results/multiseed_gnn_vs_mf_movielens_100k.*`).
-Tiny synthetic GraphSAGE metrics remain protocol smoke and must stay
-separate from the stored 100K numbers. Do not add MovieLens 1M or GCN
+Phase 8 is delivered for the ADR-008 demo CLI: load a GraphSAGE or
+PairScorer-compatible checkpoint, score candidate movie IDs, print top-K
+(`python/sagerec_serve.py`, `scripts/demo_recommend.py`). Tiny synthetic
+GraphSAGE metrics remain protocol smoke and must stay separate from the
+stored 100K numbers. Do not add MovieLens 1M, GCN, HTTP, or batch-export
 paths. Do not invent metrics or hand-edit timings.
 
 ## Read order
@@ -70,6 +73,8 @@ Accepted and recorded in `docs/decisions.md`:
   NeighborLoader).
 - ADR-007: Multi-seed published MF vs GraphSAGE comparison on MovieLens
   100K (seeds 7, 11, 13, 17, 19; mean ± sample std).
+- ADR-008: Demo CLI serving (load checkpoint, score candidates, print
+  top-K). Not batch export. Not a local HTTP API.
 
 Do not add node2vec unless a superseding ADR accepts it.
 

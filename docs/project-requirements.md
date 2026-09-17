@@ -56,6 +56,15 @@ both recommendation quality and measured native sampling performance.
 - Report GNN and baseline results in one table and at least one chart.
 - Record uncertainty across multiple seeds or explicitly label a single-seed smoke result.
 
+### Serving
+
+- Provide a demo CLI that loads a GraphSAGE or PairScorer-compatible
+  checkpoint, scores caller-supplied candidate movie IDs for one user,
+  and prints top-K (ADR-008). Missing or corrupt checkpoints must fail
+  with an actionable nonzero exit.
+- Do not add a local HTTP API or batch export unless a superseding ADR
+  accepts them. Do not download MovieLens from the demo CLI by default.
+
 ### Performance benchmark
 
 - Implement a naive Python reference sampler with matching sampling semantics.

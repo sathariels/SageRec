@@ -27,6 +27,7 @@ flowchart TB
       F[Baseline trainer]
       E[Ranking evaluator]
       Q[Reference sampler benchmark]
+      V[Demo CLI top-K]
     end
 
     R --> P --> S
@@ -35,6 +36,8 @@ flowchart TB
     S --> B --> N --> Y --> L --> G --> E
     S --> F --> E
     Y --> Q
+    G --> V
+    F --> V
     M --> G
     M --> F
     M --> E
@@ -225,6 +228,10 @@ does not use a PyG NeighborLoader.
    protocol, and metrics). The ADR-007 multi-seed leaderboard reuses
    that protocol across seeds 7, 11, 13, 17, and 19 via
    `python/sagerec_multiseed.py`.
+9. Save a schema-v1 `sagerec_checkpoint` and score caller-supplied
+   candidates with the ADR-008 demo CLI (`python/sagerec_serve.py`).
+   GraphSAGE serve rebuilds the train-only native CSR for neighborhoods;
+   it does not download MovieLens or start an HTTP server.
 
 The GNN family is GraphSAGE (ADR-002). Production message passing is PyG
 `SAGEConv` (ADR-006) on CPU, still fed by native samples. Ranking on 100K
@@ -251,7 +258,20 @@ do not add node2vec or extra ML libraries for this slice.
 Models implement `sagerec_scoring.PairScorer.score_pairs(user_ids, item_ids)`
 and return one higher-is-better score per aligned pair. The baseline
 (`ImplicitMF`) and GraphSAGE (`GraphSAGERecommender`) satisfy that
-protocol so the evaluator stays model-agnostic.
+protocol so the evaluator stays model-agnostic. The ADR-008 demo CLI
+reuses the same `PairScorer` path: load a checkpoint, score candidates
+for one user, print top-K (score descending, smaller `movie_id` breaks
+ties).
+
+## Demo serving (ADR-008)
+
+`python/sagerec_serve.py` loads a schema-v1 `sagerec_checkpoint` written
+by `save_checkpoint`. GraphSAGE checkpoints store hyperparams,
+`state_dict`, graph size, and train-only pairs so serve can rebuild a
+`NativeMinibatchSampler` CSR. Implicit MF checkpoints store factors
+only. Missing or corrupt files fail with `ServeError`. The CLI does not
+download MovieLens, export a batch, or bind a port. GraphSAGE
+neighborhoods at serve time still come from native `sample_neighbors`.
 
 ## Evaluation boundary
 
@@ -269,7 +289,8 @@ The shared protocol for this slice:
 - Candidates are every movie in `[0, num_movies)` except that user's
   training positives, and except validation positives when the target
   split is test. The evaluation positive stays in the candidate set.
-- Rank by score descending; ties break on smaller `movie_id`.
+- Rank by score descending; ties break on smaller `movie_id`
+  (the ADR-008 demo CLI uses this same tie-break).
 - Report Recall@10 and NDCG@10 per user, then macro-average.
 - Tiny synthetic unittest metrics are protocol verification, not a
   MovieLens 100K quality claim. Stored 100K numbers live under `results/`

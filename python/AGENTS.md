@@ -9,7 +9,8 @@ ranking evaluator, the native-backed mini-batch neighborhood helper,
 GraphSAGE training on that harness, the Phase 5 GNN-versus-MF
 comparison writer, the Phase 2 native-versus-reference sampler
 timing harness, Phase 6 PyG SAGEConv message passing on native
-samples, and the ADR-007 multi-seed MF vs GraphSAGE aggregator.
+samples, the ADR-007 multi-seed MF vs GraphSAGE aggregator, and
+the ADR-008 demo CLI (`sagerec_serve`).
 
 ## Current slice
 
@@ -65,6 +66,11 @@ samples, and the ADR-007 multi-seed MF vs GraphSAGE aggregator.
   timing. Default graphs are synthetic. Optional train-only MovieLens
   100K timing is a script flag and must not run in default CI. Do not
   invent or hand-edit timings.
+- `sagerec_serve.py` is the ADR-008 demo serving slice: schema-v1
+  checkpoint save/load, `PairScorer` candidate ranking (score
+  descending, `movie_id` ascending ties), and CLI logic. GraphSAGE
+  serve rebuilds a train-only `NativeMinibatchSampler` CSR. Do not add
+  HTTP, batch export, MovieLens auto-download, or a PyG NeighborLoader.
 - Do not implement node2vec, MovieLens 1M, or GCN.
 
 ## Boundaries
@@ -133,3 +139,7 @@ samples, and the ADR-007 multi-seed MF vs GraphSAGE aggregator.
 - Phase 2 sampler timing: parity-before-timing, required JSON schema
   fields, and a tiny synthetic smoke. Do not assert machine-specific
   speedups. Do not download MovieLens in default CI.
+- Phase 8 demo CLI: missing/corrupt checkpoint → actionable nonzero
+  exit; deterministic top-K; finite scores; documented tie-break;
+  GraphSAGE serve still calls native `sample_neighbors`; synthetic
+  temp-dir checkpoints only. Do not download MovieLens.
