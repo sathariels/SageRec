@@ -10,6 +10,10 @@ built from native ``NeighborhoodBatch`` hops. Pair scoring stays in this
 module. MovieLens 100K quality numbers come from ``movielens_100k_config``
 + the 100K train/eval script, never from the tiny synthetic protocol smoke.
 Stored 100K JSON under ``results/`` is not retconned here.
+
+Checkpoint save/load for the ADR-008 demo CLI lives in ``sagerec_serve``
+(schema ``sagerec_checkpoint`` v1). Training here does not write those
+files automatically.
 """
 
 from __future__ import annotations

@@ -50,4 +50,9 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   type, compiler, Python, CPU, timing statistic, speedup). Use a tiny
   synthetic graph. Do not assert machine-specific speedups. Do not
   download MovieLens or run the 100K quality job in default CI.
+- Cover Phase 8 demo CLI / checkpoint load on synthetic temp-dir
+  artifacts: missing and corrupt checkpoints fail with an actionable
+  nonzero exit; top-K is deterministic; scores are finite; ranking is
+  score descending with `movie_id` ascending ties; GraphSAGE serve
+  calls native `sample_neighbors` and does not download MovieLens.
 - Keep type hints on test helpers that form part of a public-looking fixture.

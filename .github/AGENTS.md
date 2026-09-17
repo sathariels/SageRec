@@ -23,4 +23,6 @@ GitHub Actions here must verify the native foundation without side effects.
   Default CI may install CPU-only PyTorch and `torch-geometric` for
   GraphSAGE SAGEConv tests; do not add CUDA wheels, optional PyG
   extension wheels, PyG NeighborLoader jobs, MovieLens downloads, or a
-  live 100K quality-table job.
+  live 100K quality-table job. Phase 8 demo-CLI tests must use synthetic
+  temp-dir checkpoints and must not download MovieLens or start an HTTP
+  server.

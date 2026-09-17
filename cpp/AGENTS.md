@@ -60,7 +60,9 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
   ADR-007 multi-seed aggregation tests (fixture JSON + tiny synthetic
   two-seed smoke; no MovieLens download), and
   Phase 2 sampler-timing tests (parity-before-timing + JSON schema on a
-  tiny synthetic graph; no MovieLens download, no speedup thresholds).
+  tiny synthetic graph; no MovieLens download, no speedup thresholds),
+  and Phase 8 demo-CLI tests (missing/corrupt checkpoints, synthetic
+  top-K; no MovieLens download).
   PYTHONPATH includes the build directory and `python/` so `sagerec_*`
   modules import cleanly.
 

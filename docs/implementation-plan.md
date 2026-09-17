@@ -3,17 +3,19 @@
 ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
 (uniform sampling without replacement), ADR-006 (PyG SAGEConv on
-native neighborhoods), and ADR-007 (5-seed MF vs GraphSAGE leaderboard)
-are accepted. MovieLens 1M remains deferred. Phase 2 is
-delivered/complete for MovieLens 100K: download and on-disk `processed/`
-prep, and timing charts (native vs Python reference sampler, stored
-JSON/SVG). Phase 4 GraphSAGE training on the native-backed mini-batch
-harness is delivered. Phase 5 is delivered for the single-seed 100K
-GraphSAGE run and GNN-versus-MF comparison (historical single-seed
-provenance; not overwritten by later multi-seed artifacts).
-Phase 6 is delivered for PyG `SAGEConv` message passing still fed by
-`graph_sampler` / `sagerec_minibatch`. Phase 7 is delivered for the
-5-seed MovieLens 100K MF vs GraphSAGE leaderboard with mean±std.
+native neighborhoods), ADR-007 (5-seed MF vs GraphSAGE leaderboard),
+and ADR-008 (demo CLI serving) are accepted. MovieLens 1M remains
+deferred. Phase 2 is delivered/complete for MovieLens 100K: download
+and on-disk `processed/` prep, and timing charts (native vs Python
+reference sampler, stored JSON/SVG). Phase 4 GraphSAGE training on the
+native-backed mini-batch harness is delivered. Phase 5 is delivered for
+the single-seed 100K GraphSAGE run and GNN-versus-MF comparison
+(historical single-seed provenance; not overwritten by later multi-seed
+artifacts). Phase 6 is delivered for PyG `SAGEConv` message passing
+still fed by `graph_sampler` / `sagerec_minibatch`. Phase 7 is delivered
+for the 5-seed MovieLens 100K MF vs GraphSAGE leaderboard with mean±std.
+Phase 8 is delivered for the ADR-008 demo CLI (checkpoint load, candidate
+scoring, top-K print) with synthetic harness tests.
 
 ## Phase 1: Native foundation
 
@@ -241,4 +243,32 @@ Opened in the ADR-007 multi-seed slice:
 
 Exit condition: measured 5-seed JSON/markdown/SVG committed from a real
 run, docs record ADR-007, and the fast CI path stays green.
+
+## Phase 8: Demo CLI serving
+
+Opened in the ADR-008 demo-CLI slice:
+
+- Schema-v1 checkpoint (`sagerec_checkpoint`) with model name,
+  hyperparams, `state_dict`, and GraphSAGE train-only pairs so serve can
+  rebuild the native CSR. Implicit MF is PairScorer-compatible.
+- `python/sagerec_serve.py` loads the checkpoint, scores caller-supplied
+  candidate movie IDs for one user through `PairScorer`, and ranks top-K
+  (score descending, `movie_id` ascending ties). GraphSAGE neighborhoods
+  still come from `graph_sampler` / `sagerec_minibatch` (no NeighborLoader).
+- Thin launcher `scripts/demo_recommend.py` (`--checkpoint`, `--user`,
+  `--candidates`, `--k`). Optional `--train-pairs` / `--processed-dir`
+  when a GraphSAGE checkpoint omits pairs. No auto-download.
+- Harness tests: missing/corrupt checkpoint → actionable nonzero exit;
+  deterministic top-K; finite scores; documented tie-break; synthetic
+  temp-dir graphs only. Default CI does not download MovieLens.
+
+Still not started:
+
+- Batch export of scores and a local HTTP recommend API (rejected for
+  this slice unless a superseding ADR accepts them).
+- MovieLens 1M, GCN, node2vec, NeighborLoader.
+
+Exit condition: ADR-008 recorded, demo CLI + tests on the default CI
+path (CTest + Python unittest), and docs match the checkpoint/CLI
+contract. Do not invent or edit stored 100K quality result files.
 
