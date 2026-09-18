@@ -1,5 +1,10 @@
 # Architecture
 
+SageRec is a MovieLens GraphSAGE recommender whose neighborhood source is a
+C++ CSR sampler (`graph_sampler`), not a PyG NeighborLoader. The interview-facing
+problem → result pitch and copied `results/` numbers live in the [root README](../README.md).
+This document is the component contract.
+
 ## Component model
 
 ```mermaid
