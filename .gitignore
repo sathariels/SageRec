@@ -23,6 +23,7 @@ data/processed/*
 !data/processed/manifest.schema.json
 results/checkpoints/
 results/runs/
+results/serving/
 
 # Editors and operating systems
 .DS_Store

@@ -9,8 +9,9 @@ ranking evaluator, the native-backed mini-batch neighborhood helper,
 GraphSAGE training on that harness, the Phase 5 GNN-versus-MF
 comparison writer, the Phase 2 native-versus-reference sampler
 timing harness, Phase 6 PyG SAGEConv message passing on native
-samples, the ADR-007 multi-seed MF vs GraphSAGE aggregator, and
-the ADR-008 demo CLI (`sagerec_serve`).
+samples, the ADR-007 multi-seed MF vs GraphSAGE aggregator, the ADR-008 demo
+CLI (`sagerec_serve`), and the ADR-009 HTTP serving layer
+(`sagerec_export`, `sagerec_serving`, `sagerec_api`, `sagerec_loadtest`).
 
 ## Current slice
 
@@ -69,9 +70,23 @@ the ADR-008 demo CLI (`sagerec_serve`).
 - `sagerec_serve.py` is the ADR-008 demo serving slice: schema-v1
   checkpoint save/load, `PairScorer` candidate ranking (score
   descending, `movie_id` ascending ties), and CLI logic. GraphSAGE
-  serve rebuilds a train-only `NativeMinibatchSampler` CSR. Do not add
-  HTTP, batch export, MovieLens auto-download, or a PyG NeighborLoader.
-- Do not implement node2vec, MovieLens 1M, or GCN.
+  serve rebuilds a train-only `NativeMinibatchSampler` CSR. The CLI
+  does not download MovieLens or bind a port. HTTP lives in
+  `sagerec_api` (ADR-009), not here.
+- `sagerec_export.py` writes a serving artifact from a checkpoint.
+  GraphSAGE reuses `eval_embedding_matrices` (native sampler once).
+  Implicit MF copies factors and biases and requires train pairs for
+  the seen-item mask. No MovieLens download and no HTTP server.
+- `sagerec_serving.py` loads that artifact and runs exact NumPy top-K.
+  It must not import PyTorch, PyG, or `graph_sampler`. FAISS is not
+  required.
+- `sagerec_api.py` is the FastAPI app: `GET /healthz` and
+  `GET /recommend`. Unknown users are HTTP 404. Do not sample or train
+  on the request path.
+- `sagerec_loadtest.py` measures that endpoint and writes
+  `results/serving_latency.json` and `.md`. Do not hand-edit those
+  numbers. The default catalog is synthetic. Do not download MovieLens.
+- Do not implement node2vec, MovieLens 1M, GCN, or batch export.
 
 ## Boundaries
 
@@ -143,3 +158,11 @@ the ADR-008 demo CLI (`sagerec_serve`).
   exit; deterministic top-K; finite scores; documented tie-break;
   GraphSAGE serve still calls native `sample_neighbors`; synthetic
   temp-dir checkpoints only. Do not download MovieLens.
+- Phase 9 HTTP API: pytest + FastAPI `TestClient` on a tiny fixture
+  artifact. Cover `/healthz`, `/recommend` item id/title/score,
+  exclusion of seen items, tie-break, HTTP 404 for unknown users, and
+  HTTP 422 for invalid queries. GraphSAGE export must call native
+  `sample_neighbors` once at export time. The test module must stay
+  importable by `unittest discover` without FastAPI installed at import
+  time. Do not download MovieLens or regenerate
+  `results/serving_latency.*` from tests. Do not bind a public port.

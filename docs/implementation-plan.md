@@ -4,7 +4,8 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
 (uniform sampling without replacement), ADR-006 (PyG SAGEConv on
 native neighborhoods), ADR-007 (5-seed MF vs GraphSAGE leaderboard),
-and ADR-008 (demo CLI serving) are accepted. MovieLens 1M remains
+ADR-008 (demo CLI serving), and ADR-009 (HTTP serving on precomputed
+embeddings) are accepted. MovieLens 1M remains
 deferred. Phase 2 is delivered/complete for MovieLens 100K: download
 and on-disk `processed/` prep, and timing charts (native vs Python
 reference sampler, stored JSON/SVG). Phase 4 GraphSAGE training on the
@@ -15,7 +16,10 @@ artifacts). Phase 6 is delivered for PyG `SAGEConv` message passing
 still fed by `graph_sampler` / `sagerec_minibatch`. Phase 7 is delivered
 for the 5-seed MovieLens 100K MF vs GraphSAGE leaderboard with mean±std.
 Phase 8 is delivered for the ADR-008 demo CLI (checkpoint load, candidate
-scoring, top-K print) with synthetic harness tests.
+scoring, top-K print) with synthetic harness tests. Phase 9 is delivered
+for the ADR-009 HTTP API: offline embedding export, FastAPI
+`GET /recommend` and `/healthz`, NumPy top-K, pytest `TestClient`
+coverage, and a measured `results/serving_latency.*` load test.
 
 ## Phase 1: Native foundation
 
@@ -262,13 +266,56 @@ Opened in the ADR-008 demo-CLI slice:
   deterministic top-K; finite scores; documented tie-break; synthetic
   temp-dir graphs only. Default CI does not download MovieLens.
 
-Still not started:
+Still not started in this slice:
 
-- Batch export of scores and a local HTTP recommend API (rejected for
-  this slice unless a superseding ADR accepts them).
+- Batch export of scores (still rejected; ADR-009 does not accept it).
 - MovieLens 1M, GCN, node2vec, NeighborLoader.
+
+HTTP recommend moved to Phase 9 under ADR-009. The demo CLI remains.
 
 Exit condition: ADR-008 recorded, demo CLI + tests on the default CI
 path (CTest + Python unittest), and docs match the checkpoint/CLI
 contract. Do not invent or edit stored 100K quality result files.
+
+## Phase 9: HTTP serving API
+
+Opened in the ADR-009 slice. ADR-009 supersedes ADR-008's no-HTTP
+scope. The demo CLI stays.
+
+- Offline export (`python/sagerec_export.py`,
+  `scripts/export_embeddings.py`) writes a `sagerec_serving_artifact`
+  version 1 `.npz` from a schema-v1 checkpoint. GraphSAGE reuses
+  `GraphSAGERecommender.eval_embedding_matrices` (native
+  `graph_sampler` via `sagerec_minibatch`, once, at `config.seed`).
+  Implicit MF copies the factors and biases `score_pairs` already
+  uses and requires train pairs so already-seen items can be masked.
+- FastAPI service (`python/sagerec_api.py`, `scripts/serve_api.py`):
+  `GET /healthz` and `GET /recommend?user_id=&k=`. Rows are item id,
+  title, and score. Train positives are excluded. Unknown users return
+  404. Invalid queries return 422. Top-K is exact NumPy
+  (`python/sagerec_serving.py`). FAISS is not required.
+- `Dockerfile` serves the artifact only (no training stack). `Makefile`
+  documents export, serve, load test, pytest, and docker targets.
+- Load test (`python/sagerec_loadtest.py`,
+  `scripts/loadtest_serving.py`) writes measured p50/p95/p99 and
+  throughput to `results/serving_latency.json` and `.md`, with CPU and
+  dependency provenance. The committed run uses a synthetic catalog
+  whose user/item counts match public MovieLens 100K cardinality.
+  Embeddings are seeded noise. Do not hand-edit those numbers and do
+  not treat them as ranking quality.
+- Pytest + FastAPI `TestClient` on a tiny fixture
+  (`python/tests/test_serving_api.py`), wired into CTest as
+  `python_serving_api`. Default CI does not download MovieLens, does
+  not regenerate the latency file, and does not bind a public port.
+
+Still not started:
+
+- Batch export.
+- MovieLens 1M, GCN, node2vec, NeighborLoader.
+- FAISS as a required index.
+
+Exit condition: ADR-009 recorded, export and API tests on the default
+CI path, measured latency files committed from a real run, and docs
+match the artifact and HTTP contract. Do not invent or edit stored
+100K quality result files.
 

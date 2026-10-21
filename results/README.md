@@ -23,5 +23,12 @@ Machine-readable run summaries belong here.
   Optional live MovieLens 100K timing is a script flag and is not the
   committed default.
 
+- `serving_latency.json` and `.md` are the Phase 9 ADR-009 HTTP load
+  test (`GET /recommend` p50/p95/p99 and throughput). Values are
+  measured on one machine. The committed catalog is synthetic noise at
+  MovieLens 100K user/item counts, not a trained model and not a
+  ranking-quality result. Do not hand-edit them.
+
 Do not invent placeholder metrics or hand-edit timings. Checkpoints and
-bulky logs stay ignored.
+bulky logs stay ignored. Serving embedding artifacts under
+`results/serving/` stay ignored.

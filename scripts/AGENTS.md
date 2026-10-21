@@ -56,9 +56,22 @@ Opened Phase 8 demo CLI (ADR-008):
   `python/sagerec_serve.py`. Does not download MovieLens, start HTTP,
   or export a batch.
 
+Opened Phase 9 HTTP serving (ADR-009):
+
+- `export_embeddings.py` — write a serving `.npz` from a checkpoint.
+  Delegates to `python/sagerec_export.py`. Does not download MovieLens
+  or bind a port.
+- `serve_api.py` — serve `GET /recommend` from that artifact. Delegates
+  to uvicorn and `python/sagerec_api.py`.
+- `loadtest_serving.py` — measure p50/p95/p99 and throughput and write
+  `results/serving_latency.json` and `.md`. Default catalog is
+  synthetic. Does not download MovieLens. Do not hand-edit the output.
+
 Do not add MovieLens 1M scripts. The Phase 4 mini-batch helper lives in
 `python/sagerec_minibatch.py`. GraphSAGE training lives in
 `python/sagerec_graphsage.py` (Phase 6: PyG SAGEConv, native
 neighborhoods). Sampler timing logic lives in
 `python/sagerec_sampler_benchmark.py`. Demo serving lives in
-`python/sagerec_serve.py`.
+`python/sagerec_serve.py`. HTTP serving lives in `python/sagerec_api.py`
+and `python/sagerec_serving.py`. Embedding export lives in
+`python/sagerec_export.py`.

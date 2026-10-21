@@ -61,9 +61,17 @@ both recommendation quality and measured native sampling performance.
 - Provide a demo CLI that loads a GraphSAGE or PairScorer-compatible
   checkpoint, scores caller-supplied candidate movie IDs for one user,
   and prints top-K (ADR-008). Missing or corrupt checkpoints must fail
-  with an actionable nonzero exit.
-- Do not add a local HTTP API or batch export unless a superseding ADR
-  accepts them. Do not download MovieLens from the demo CLI by default.
+  with an actionable nonzero exit. Do not download MovieLens from the
+  demo CLI by default.
+- Provide an HTTP serving layer (ADR-009) that supersedes ADR-008's
+  no-HTTP scope: an offline export of user and item embeddings from a
+  trained checkpoint, and a FastAPI service with `GET /healthz` and
+  `GET /recommend?user_id=&k=`. Recommendations exclude already-seen
+  train positives and return item id, title, and score. Unknown users
+  return 404. Top-K is exact NumPy; FAISS is not required.
+- Record a measured load test (p50/p95/p99 and throughput) with hardware
+  provenance. Do not hand-edit those numbers.
+- Do not add batch export unless a superseding ADR accepts it.
 
 ### Performance benchmark
 

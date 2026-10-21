@@ -33,6 +33,8 @@ flowchart TB
       E[Ranking evaluator]
       Q[Reference sampler benchmark]
       V[Demo CLI top-K]
+      X[Embedding export]
+      W[HTTP recommend API]
     end
 
     R --> P --> S
@@ -43,6 +45,9 @@ flowchart TB
     Y --> Q
     G --> V
     F --> V
+    G --> X
+    F --> X
+    X --> W
     M --> G
     M --> F
     M --> E
@@ -235,8 +240,12 @@ does not use a PyG NeighborLoader.
    `python/sagerec_multiseed.py`.
 9. Save a schema-v1 `sagerec_checkpoint` and score caller-supplied
    candidates with the ADR-008 demo CLI (`python/sagerec_serve.py`).
-   GraphSAGE serve rebuilds the train-only native CSR for neighborhoods;
-   it does not download MovieLens or start an HTTP server.
+   GraphSAGE serve rebuilds the train-only native CSR for neighborhoods.
+   The CLI does not download MovieLens.
+10. Export those eval embeddings (GraphSAGE) or MF factors to a serving
+    artifact and answer `GET /recommend` from FastAPI (ADR-009). Request
+    time is a NumPy dot product. Native sampling runs at export, not per
+    request.
 
 The GNN family is GraphSAGE (ADR-002). Production message passing is PyG
 `SAGEConv` (ADR-006) on CPU, still fed by native samples. Ranking on 100K
@@ -276,7 +285,35 @@ by `save_checkpoint`. GraphSAGE checkpoints store hyperparams,
 `NativeMinibatchSampler` CSR. Implicit MF checkpoints store factors
 only. Missing or corrupt files fail with `ServeError`. The CLI does not
 download MovieLens, export a batch, or bind a port. GraphSAGE
-neighborhoods at serve time still come from native `sample_neighbors`.
+neighborhoods at CLI serve time still come from native `sample_neighbors`.
+HTTP serving of the same scores is ADR-009 and uses a precomputed artifact.
+
+## HTTP serving (ADR-009)
+
+ADR-009 supersedes ADR-008's no-HTTP scope. The demo CLI remains.
+
+`python/sagerec_export.py` loads a schema-v1 checkpoint.
+`GraphSAGERecommender.eval_embedding_matrices` materializes one
+native-sampled embedding per node at `config.seed` (the same cache
+`score_pairs` uses). Implicit MF copies `user_factors`, `item_factors`,
+and biases. Train-positive movie ids are stored so recommend can exclude
+already-seen items. Titles come from an optional JSON or `u.item` file,
+otherwise `movie_{local_id}`.
+
+`python/sagerec_serving.py` reads the `.npz` and ranks with exact NumPy:
+score descending, smaller item id on ties. It does not import PyTorch or
+`graph_sampler`. FAISS is not required.
+
+`python/sagerec_api.py` exposes `GET /healthz` and
+`GET /recommend?user_id=&k=`. Each recommendation row has `item_id`
+(zero-based movie id), `title`, and `score`. Unknown users return 404.
+The runtime image (`Dockerfile`) contains that app and the artifact
+loader only.
+
+`results/serving_latency.json` and `.md` are a measured local load test
+(p50/p95/p99 and throughput) with CPU provenance. The committed catalog
+is synthetic noise at MovieLens 100K user/item counts. It is not a
+ranking-quality result and not a production latency claim.
 
 ## Evaluation boundary
 

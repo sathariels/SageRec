@@ -1,0 +1,6 @@
+# Pytest API tests and the httpx load-test client (ADR-009).
+# Includes the serving runtime pins.
+#   python3 -m pip install -r python/requirements-serve-test.txt
+-r requirements-serve.txt
+httpx==0.28.1
+pytest==9.1.1
