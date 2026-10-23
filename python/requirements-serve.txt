@@ -1,0 +1,8 @@
+# Runtime dependencies for the ADR-009 HTTP service.
+# The image and `scripts/serve_api.py` load a precomputed .npz only.
+# They do not need PyTorch, PyG, or the graph_sampler extension.
+# Install:
+#   python3 -m pip install -r python/requirements-serve.txt
+numpy==1.26.4
+fastapi==0.159.0
+uvicorn==0.54.0

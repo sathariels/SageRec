@@ -1,0 +1,9 @@
+.git
+build
+data/raw
+data/processed
+results
+**/__pycache__
+**/*.so
+.venv
+venv

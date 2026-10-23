@@ -12,9 +12,11 @@ decisions, evaluation protocol, and phased delivery plans.
   chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
   (uniform sampling without replacement), ADR-006 (PyG SAGEConv on
   native neighborhoods), ADR-007 (multi-seed MF vs GraphSAGE
-  leaderboard), and ADR-008 (demo CLI serving) are accepted. Do not add
-  MovieLens 1M, GCN, node2vec, batch export, or a local HTTP API. Do not
-  switch primary experiments to a PyG NeighborLoader.
+  leaderboard), ADR-008 (demo CLI serving), and ADR-009 (HTTP serving
+  on precomputed embeddings) are accepted. Do not add MovieLens 1M,
+  GCN, node2vec, or batch export. ADR-009 supersedes ADR-008's no-HTTP
+  clause; do not put sampling or training on the HTTP request path.
+  Do not switch primary experiments to a PyG NeighborLoader.
 - Record consequential decisions with context, alternatives, rationale, and consequences.
 - Define metric and benchmark protocols before producing results.
 - Keep diagrams aligned with actual component boundaries.

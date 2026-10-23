@@ -4,13 +4,14 @@
 
 **Problem:** GraphSAGE training needs fast, seeded neighbor sampling on a leakage-safe user–movie graph. A PyG `NeighborLoader` wrapper would hide the systems work.
 
-**Result:** SageRec puts a real C++17 CSR sampler in the Python training loop, then compares GraphSAGE to implicit matrix factorization on the same MovieLens 100K protocol, then serves top-K from a checkpoint.
+**Result:** SageRec puts a real C++17 CSR sampler in the Python training loop, then compares GraphSAGE to implicit matrix factorization on the same MovieLens 100K protocol, then serves top-K from a checkpoint and from a precomputed-embedding HTTP API.
 
 | 6-second scan | Stored evidence |
 | --- | --- |
 | Native C++ `graph_sampler` is **111.177×** faster than a matching Python reference (median) | [`results/sampler_timing.md`](results/sampler_timing.md) |
 | GraphSAGE **beats** same-protocol MF on single-seed ML-100K **Recall@10** (0.047720 vs 0.038176, seed 7) | [`results/gnn_vs_mf_movielens_100k.md`](results/gnn_vs_mf_movielens_100k.md) |
 | Demo CLI loads a checkpoint and prints top-K | [`scripts/demo_recommend.py`](scripts/demo_recommend.py) |
+| HTTP `GET /recommend` p50 / p95 / p99 is **19.909990 / 59.100509 / 85.913701 ms** (617.951794 req/s) | [`results/serving_latency.md`](results/serving_latency.md) |
 
 Those figures are copied from committed `results/` (and the existing README tables below). They are **not** rounded further, **not** SOTA, and **not** production latency. Sampler timing is a synthetic CSR on one machine. The Recall@10 pair is Phase 5 single-seed provenance (in-repo mean layers); the 5-seed PyG `SAGEConv` leaderboard is a separate table.
 
@@ -24,6 +25,7 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 4. **Implicit MF baseline** — same split, eligible users, candidates, Recall@10 / NDCG@10 (ADR-004).
 5. **5-seed leaderboard** — seeds 7, 11, 13, 17, 19; mean ± sample std (ADR-007).
 6. **Demo CLI** — load a GraphSAGE or PairScorer checkpoint, score candidate movie IDs, print top-K (ADR-008).
+7. **HTTP API** — export those embeddings once, then `GET /recommend` with exact NumPy top-K (ADR-009).
 
 ```mermaid
 flowchart LR
@@ -38,6 +40,9 @@ flowchart LR
     H --> I
     G --> K[Demo CLI top-K]
     H --> K
+    G --> S[Embedding export]
+    H --> S
+    S --> T[HTTP recommend API]
     D --> J[C++ vs Python timing charts]
     D --> R[Python reference sampler]
 ```
@@ -148,6 +153,66 @@ PYTHONPATH=build:python python3 scripts/demo_recommend.py \
 
 Stdout is a TSV table: `rank`, `movie_id`, `score`. GraphSAGE checkpoints embed train-only pairs so the native CSR can be rebuilt. If those pairs are omitted, pass `--train-pairs path.json` or `--processed-dir data/processed` (existing artifacts only). Missing or corrupt checkpoints exit nonzero with an actionable error.
 
+## Serving (ADR-009)
+
+ADR-009 adds an HTTP layer and supersedes ADR-008's no-HTTP scope. The demo CLI stays. Request time does not sample neighbors and does not run `SAGEConv`. Export materializes the same GraphSAGE eval embeddings `score_pairs` caches (native `graph_sampler` once, at the checkpoint seed) or copies implicit-MF factors and biases. The service then ranks with exact NumPy: score descending, smaller item id on ties. FAISS is not required. Already-seen items are the train positives stored in the artifact. `item_id` is the zero-based movie id.
+
+Export (needs the Release `graph_sampler` build and the training stack):
+
+```bash
+PYTHONPATH=build:python python3 scripts/export_embeddings.py \
+  --checkpoint results/checkpoints/graphsage.pt \
+  --output results/serving/embeddings.npz
+```
+
+Implicit MF checkpoints do not store train pairs. Pass `--train-pairs` or `--processed-dir` so seen items can be excluded. Optional `--titles` is a JSON list or a MovieLens `u.item` file. Without it, titles are `movie_{local_id}`. The exporter does not download MovieLens. `results/serving/` is gitignored.
+
+Serve:
+
+```bash
+python3 -m pip install -r python/requirements-serve.txt
+PYTHONPATH=python python3 scripts/serve_api.py \
+  --artifact results/serving/embeddings.npz \
+  --host 127.0.0.1 --port 8000
+```
+
+```bash
+curl -s 'http://127.0.0.1:8000/healthz'
+curl -s 'http://127.0.0.1:8000/recommend?user_id=0&k=10'
+```
+
+`GET /healthz` returns 200 when the artifact loaded. `GET /recommend` returns `item_id`, `title`, and `score`. An unknown `user_id` is HTTP 404. A missing or non-integer `user_id`, or `k < 1`, is HTTP 422.
+
+The same targets exist on the `Makefile` (`make export-embeddings CHECKPOINT=...`, `make serve ARTIFACT=...`, `make loadtest`, `make test-serving`, `make docker-build`). The image only runs the API:
+
+```bash
+docker build -t sagerec-serve .
+docker run --rm -p 8000:8000 \
+  -v "$PWD/results/serving/embeddings.npz:/models/embeddings.npz:ro" \
+  -e SAGEREC_SERVING_ARTIFACT=/models/embeddings.npz \
+  sagerec-serve
+```
+
+### Measured recommend latency
+
+Copied from [`results/serving_latency.json`](results/serving_latency.json) (markdown rendering in [`results/serving_latency.md`](results/serving_latency.md)). Protocol `serving-latency-v1`. Local uvicorn, httpx client, 1000 measured `GET /recommend` calls after 100 warm-up calls, concurrency 16, `k=10`, NumPy linear percentiles. Catalog: synthetic standard-normal embeddings, seed 7, 943 users, 1682 items, dim 16, 20 seen items per user. Those counts match public MovieLens 100K cardinality so the dot product is a similar size. The embeddings are not a trained model, and no ratings were read. Hardware: Intel(R) Xeon(R) Processor, 4 logical CPUs, Linux 6.12.94+, Python 3.12.3, NumPy 1.26.4, FastAPI 0.159.0, uvicorn 0.54.0, httpx 0.28.1.
+
+| Statistic | Value |
+| --- | ---: |
+| p50 | 19.909990 ms |
+| p95 | 59.100509 ms |
+| p99 | 85.913701 ms |
+| throughput | 617.951794 requests/s |
+
+This is one-machine HTTP latency, not a service-level objective and not a ranking-quality claim. Regenerate with `PYTHONPATH=python python3 scripts/loadtest_serving.py` (that overwrites the committed files; do not hand-edit them).
+
+API tests (pytest + `TestClient`, tiny fixture, no public port):
+
+```bash
+python3 -m pip install -r python/requirements-serve-test.txt
+PYTHONPATH=build:python python3 -m pytest python/tests/test_serving_api.py -q
+```
+
 ## MovieLens 100K download and prep
 
 Official archive (GroupLens):
@@ -183,17 +248,18 @@ If `files.grouplens.org` presents an expired TLS certificate, the downloader ret
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
 | GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — PyG `SAGEConv` + `PairScorer` on native samples |
 | Demo CLI | [`python/sagerec_serve.py`](python/sagerec_serve.py) + [`scripts/demo_recommend.py`](scripts/demo_recommend.py) — schema-v1 checkpoint load, candidate scores, top-K print (ADR-008) |
+| HTTP serving | [`python/sagerec_export.py`](python/sagerec_export.py), [`python/sagerec_serving.py`](python/sagerec_serving.py), [`python/sagerec_api.py`](python/sagerec_api.py) — offline embeddings, NumPy top-K, `GET /recommend` (ADR-009) |
 | Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
 | Multi-seed aggregator | [`python/sagerec_multiseed.py`](python/sagerec_multiseed.py) — per-seed rows plus mean±sample std (ADR-007) |
 | Sampler timing | [`python/sagerec_sampler_benchmark.py`](python/sagerec_sampler_benchmark.py) — native vs reference `sample_neighbors` JSON/SVG |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/serve/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed/demo-CLI launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/serve/HTTP/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed/demo-CLI/export/serve/load-test launchers.
 
-**In this repo:** C++ CSR + seeded sampler, MovieLens 100K parser/download/prep, native mini-batch GraphSAGE (`SAGEConv`), implicit MF, shared evaluator, single-seed and 5-seed comparisons, sampler timing charts, demo CLI, Release CMake + GitHub Actions CI.
+**In this repo:** C++ CSR + seeded sampler, MovieLens 100K parser/download/prep, native mini-batch GraphSAGE (`SAGEConv`), implicit MF, shared evaluator, single-seed and 5-seed comparisons, sampler timing charts, demo CLI, HTTP serving on precomputed embeddings, Release CMake + GitHub Actions CI.
 
-**Not in this repo:** PyG NeighborLoader / ClusterLoader (rejected for primary experiments), batch export, local HTTP API, MovieLens 1M, GCN, node2vec.
+**Not in this repo:** PyG NeighborLoader / ClusterLoader (rejected for primary experiments), batch export, MovieLens 1M, GCN, node2vec.
 
 The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF and GraphSAGE metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). Phase 5 files are **single-seed** historical provenance. The ADR-007 leaderboard is a separate 5-seed SAGEConv measurement with mean±sample std. The MF JSON is not a GraphSAGE result.
 
@@ -210,7 +276,8 @@ Recorded in [`docs/decisions.md`](docs/decisions.md):
 | ADR-005 | Accepted | Uniform sampling without replacement |
 | ADR-006 | Accepted | PyG `SAGEConv` on native `graph_sampler` neighborhoods (not NeighborLoader) |
 | ADR-007 | Accepted | 5-seed MovieLens 100K MF vs GraphSAGE leaderboard (seeds 7, 11, 13, 17, 19) |
-| ADR-008 | Accepted | Demo CLI (load checkpoint, score candidates, print top-K); not batch export or HTTP |
+| ADR-008 | Accepted | Demo CLI (load checkpoint, score candidates, print top-K). HTTP prohibition superseded by ADR-009. Not batch export |
+| ADR-009 | Accepted | HTTP API on precomputed embeddings (`GET /recommend`, `/healthz`); NumPy top-K; FAISS not required |
 
 The native and Python reference samplers implement ADR-005 (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). Changing replacement policy requires a superseding ADR.
 
@@ -233,7 +300,7 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests and Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation, demo-CLI checkpoint/top-K). After a successful build:
+CTest runs native CSR/sampler/parser tests, Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation, demo-CLI checkpoint/top-K), and pytest `python_serving_api` (FastAPI `TestClient`). Install `python/requirements-serve-test.txt` before that pytest target. After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
@@ -245,6 +312,7 @@ PYTHONPATH=build:python python3 -m unittest python/tests/test_gnn_vs_mf_compare.
 PYTHONPATH=build:python python3 -m unittest python/tests/test_multiseed_gnn_vs_mf.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_sampler_benchmark.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_serve_demo.py -v
+PYTHONPATH=build:python python3 -m pytest python/tests/test_serving_api.py -q
 ```
 
 Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
@@ -273,7 +341,8 @@ The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatc
 - The ADR-007 5-seed SAGEConv leaderboard is stored under `results/multiseed_gnn_vs_mf_movielens_100k.json` (mean ± sample std). It does not overwrite the Phase 5 files. It is not a SOTA claim.
 - Native vs Python reference sampler timings are stored under `results/sampler_timing.json` (synthetic graph, median of measured repetitions). They are one-machine evidence, not a production latency or SOTA claim.
 - Production message passing is PyG `SAGEConv` on native mini-batches (ADR-006). PyG NeighborLoader is not the neighborhood source.
-- The ADR-008 demo CLI loads a local checkpoint and prints top-K; it is not an HTTP API, not a batch exporter, and not a production latency claim.
+- The ADR-008 demo CLI loads a local checkpoint and prints top-K. It is not a batch exporter and not a production latency claim.
+- ADR-009 HTTP latency is stored under `results/serving_latency.json` (synthetic catalog, one machine, p50/p95/p99 and throughput). It is not a ranking-quality result and not a service-level objective.
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.

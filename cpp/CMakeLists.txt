@@ -109,3 +109,11 @@ add_test(
 set_tests_properties(python_binding_smoke PROPERTIES
   ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:graph_sampler>:${_python_src_dir}"
 )
+
+add_test(
+  NAME python_serving_api
+  COMMAND ${Python3_EXECUTABLE} -m pytest ${_python_tests_dir}/test_serving_api.py -q --tb=short
+)
+set_tests_properties(python_serving_api PROPERTIES
+  ENVIRONMENT "PYTHONPATH=$<TARGET_FILE_DIR:graph_sampler>:${_python_src_dir}"
+)

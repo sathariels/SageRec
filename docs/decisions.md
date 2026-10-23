@@ -14,7 +14,8 @@ choice, alternatives, rationale, and consequences.
 | ADR-005 | Sampler semantics | Uniform without replacement / with replacement | Accepted: uniform without replacement |
 | ADR-006 | GraphSAGE production stack | PyG SAGEConv on native samples / PyG NeighborLoader / in-repo mean layers | Accepted: PyG SAGEConv on native `graph_sampler` neighborhoods |
 | ADR-007 | Published quality comparison | Multi-seed MF vs GraphSAGE with uncertainty / keep Phase 5 single-seed only | Accepted: 5-seed MovieLens 100K leaderboard (seeds include 7) |
-| ADR-008 | Production serving demo | Demo CLI / batch export / local HTTP API | Accepted: Demo CLI (load checkpoint, score candidates, print top-K) |
+| ADR-008 | Production serving demo | Demo CLI / batch export / local HTTP API | Accepted: Demo CLI (HTTP prohibition superseded by ADR-009) |
+| ADR-009 | HTTP serving | Precomputed-embedding HTTP API / CLI only / per-request GraphSAGE | Accepted: FastAPI on offline embeddings (NumPy top-K) |
 
 ## Accepted
 
@@ -374,9 +375,79 @@ without proving checkpoint load or ranking correctness first.
   (embedded in the checkpoint, or `--train-pairs` / `--processed-dir`).
   The CLI must not download MovieLens by default.
 - Missing or corrupt checkpoints fail with an actionable nonzero exit.
-- Do not add batch export or a local HTTP API unless a superseding ADR
-  accepts them. Do not invent or edit stored 100K quality result files.
+- Do not add batch export unless a superseding ADR accepts it. The
+  prohibition on a local HTTP API is superseded by ADR-009 (2026-10-21):
+  HTTP may serve precomputed embeddings. The demo CLI remains the
+  checkpoint-scoring interface. Do not invent or edit stored 100K
+  quality result files.
 - MovieLens 1M, GCN, and node2vec remain deferred/rejected.
+
+### ADR-009: HTTP serving on precomputed embeddings
+
+- Date: 2026-10-21
+- Owner: Nithilan Kumaran
+- Status: Accepted
+- Supersedes: the ADR-008 prohibition on a local HTTP API. The demo CLI
+  remains accepted. Batch export stays rejected.
+
+**Context:** ADR-008 shipped a demo CLI that loads a checkpoint and prints
+top-K, and deferred HTTP so checkpoint load and ranking could be tested
+without a server. Scoring GraphSAGE on the request path would re-run
+native neighbor sampling and `SAGEConv` for every call. The eval
+embeddings `GraphSAGERecommender.materialize_eval_embeddings` /
+`score_pairs` already cache, and the factors `ImplicitMF.score_pairs`
+already stores, are enough to rank with a dot product. A MovieLens 100K
+catalog is small enough that exact search does not need FAISS. Batch
+export is still out of scope. MovieLens 100K, GraphSAGE, the ADR-003
+split, implicit MF, without-replacement sampling, native neighborhoods,
+and the multi-seed leaderboard stay locked.
+
+**Choice:** An HTTP serving layer that:
+
+- Exports user and item embeddings from a trained GraphSAGE checkpoint,
+  and from an implicit-MF checkpoint (factors and biases are already the
+  embedding), to a `sagerec_serving_artifact` version 1 `.npz`.
+- Serves `GET /healthz` and `GET /recommend?user_id=&k=` with FastAPI.
+- Excludes that user's train-positive items. Each row returns the
+  zero-based item id, a title, and a score.
+- Unknown user ids return HTTP 404. Invalid query parameters return
+  HTTP 422.
+- Ranks with exact NumPy top-K: score descending, then smaller item id.
+  FAISS is not required.
+- Keeps the ADR-008 CLI. Does not add batch export.
+
+**Alternatives:** Keep the CLI only. Recompute GraphSAGE neighborhoods
+on every HTTP request. Require FAISS. Add a batch export of every user.
+
+**Rationale:** The owner asked for a serving API on 2026-10-21.
+Precomputing the embeddings the trainers already use for ranking moves
+sampling off the request path and leaves a small process that can be
+load-tested and containerized without PyTorch. Exact NumPy top-K
+preserves the ADR-008 tie-break at this catalog size. The CLI stays for
+checkpoint checks that do not bind a port.
+
+**Consequences:**
+
+- `python/sagerec_export.py` writes the artifact. GraphSAGE calls
+  `eval_embedding_matrices` (native `graph_sampler` via
+  `sagerec_minibatch`, once, at `config.seed`). Implicit MF copies
+  factors and biases and requires train pairs so already-seen items can
+  be masked. Export does not download MovieLens.
+- `python/sagerec_serving.py` loads the artifact and runs NumPy top-K.
+  It does not import PyTorch, PyG, or `graph_sampler`.
+- `python/sagerec_api.py` is the FastAPI app. `scripts/serve_api.py` is
+  a thin launcher. `Dockerfile` serves the artifact only.
+- `Makefile` documents export, serve, load-test, pytest, and docker
+  targets. `scripts/loadtest_serving.py` writes measured
+  `results/serving_latency.json` and `.md` (p50/p95/p99 and throughput)
+  with hardware provenance. Those numbers are one-machine evidence, not
+  a service-level objective and not a ranking-quality result. Do not
+  hand-edit them.
+- API tests use pytest and FastAPI `TestClient` on a tiny fixture.
+  Default CI does not download MovieLens, does not regenerate the
+  latency file, and does not bind a public port.
+- The ADR-008 demo CLI remains. Batch export stays rejected.
+  MovieLens 1M, GCN, and node2vec remain deferred or rejected.
 
 ## Proposals
 

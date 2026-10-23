@@ -2,7 +2,8 @@
 
 Loads a GraphSAGE or PairScorer-compatible implicit-MF checkpoint, scores
 caller-supplied candidate movie IDs for one user, and ranks top-K. This is a
-local CLI helper, not a batch exporter and not an HTTP API.
+local CLI helper, not a batch exporter. HTTP serving of precomputed
+embeddings is ADR-009 (``sagerec_api``); this module does not bind a port.
 
 GraphSAGE neighborhoods at serve time still come from native
 ``graph_sampler`` via ``sagerec_minibatch.NativeMinibatchSampler`` (ADR-005,

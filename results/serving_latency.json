@@ -1,0 +1,60 @@
+{
+  "benchmark": "sagerec_http_recommend",
+  "protocol_version": "serving-latency-v1",
+  "adr": "ADR-009",
+  "endpoint": "GET /recommend",
+  "catalog": {
+    "kind": "synthetic",
+    "num_users": 943,
+    "num_items": 1682,
+    "embedding_dim": 16,
+    "seen_per_user": 20,
+    "seed": 7,
+    "model": "synthetic"
+  },
+  "workload": {
+    "k": 10,
+    "n_requests": 1000,
+    "warmup_requests": 100,
+    "concurrency": 16,
+    "request_seed": 7,
+    "percentile_method": "linear",
+    "server": "uvicorn",
+    "client": "httpx.AsyncClient"
+  },
+  "latency_ms": {
+    "p50": 19.909990499968444,
+    "p95": 59.1005087500548,
+    "p99": 85.91370133994928,
+    "mean": 24.707682000997465,
+    "min": 6.654086000025927,
+    "max": 127.66264699996555,
+    "percentile_method": "linear"
+  },
+  "throughput_requests_per_s": 617.9517943900427,
+  "wall_seconds": 1.6182492049999837,
+  "n_requests": 1000,
+  "n_errors": 0,
+  "cpu": {
+    "model": "Intel(R) Xeon(R) Processor",
+    "logical_cpus": 4,
+    "machine": "x86_64"
+  },
+  "platform": {
+    "system": "Linux",
+    "release": "6.12.94+",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "python": "3.12.3",
+  "dependencies": {
+    "numpy": "1.26.4",
+    "fastapi": "0.159.0",
+    "uvicorn": "0.54.0",
+    "httpx": "0.28.1"
+  },
+  "git_commit": "70a565104f0aa00cfe85923487d3a5813f13fefb",
+  "git_dirty": true,
+  "generated_at": "2026-10-21T21:00:46.825913+00:00",
+  "note": "One-machine ADR-009 HTTP latency for GET /recommend on a local uvicorn process. Top-K is exact NumPy over precomputed embeddings. Not a ranking-quality result, not sampler timing, and not a production SLO. The catalog is seeded synthetic noise with MovieLens 100K user/item counts; no ratings were read. git_dirty was true at generation, so git_commit is the HEAD the process saw and may not contain this results file."
+}

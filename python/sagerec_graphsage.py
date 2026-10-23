@@ -13,7 +13,9 @@ Stored 100K JSON under ``results/`` is not retconned here.
 
 Checkpoint save/load for the ADR-008 demo CLI lives in ``sagerec_serve``
 (schema ``sagerec_checkpoint`` v1). Training here does not write those
-files automatically.
+files automatically. ADR-009 export
+(``sagerec_export``) reuses ``materialize_eval_embeddings`` so the HTTP
+service can rank with those cached vectors instead of sampling per request.
 """
 
 from __future__ import annotations
@@ -455,6 +457,31 @@ class GraphSAGERecommender(torch.nn.Module):
             )
         self._eval_user = encoded[: self.num_users].detach()
         self._eval_item = encoded[self.num_users :].detach()
+
+    def eval_embedding_matrices(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return user and item rows from the native-sampled eval encode.
+
+        This is the same cache ``score_pairs`` fills via
+        ``materialize_eval_embeddings`` (one ``encode_nodes`` pass at
+        ``config.seed``). Rows are float32, matching the SAGEConv
+        activations. ADR-009 export writes these arrays into the serving
+        artifact; request-time HTTP ranking does not sample again.
+        """
+        was_training = self.training
+        self.eval()
+        try:
+            with torch.no_grad():
+                self.materialize_eval_embeddings()
+                if self._eval_user is None or self._eval_item is None:
+                    raise RuntimeError(
+                        "materialize_eval_embeddings did not cache user and item rows"
+                    )
+                user = self._eval_user.detach().cpu().numpy().astype(np.float32, copy=True)
+                item = self._eval_item.detach().cpu().numpy().astype(np.float32, copy=True)
+        finally:
+            if was_training:
+                self.train()
+        return user, item
 
 
 def _unique_train_pairs(

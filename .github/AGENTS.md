@@ -23,6 +23,12 @@ GitHub Actions here must verify the native foundation without side effects.
   Default CI may install CPU-only PyTorch and `torch-geometric` for
   GraphSAGE SAGEConv tests; do not add CUDA wheels, optional PyG
   extension wheels, PyG NeighborLoader jobs, MovieLens downloads, or a
-  live 100K quality-table job. Phase 8 demo-CLI tests must use synthetic
+  live 100K quality-table job.   Phase 8 demo-CLI tests must use synthetic
   temp-dir checkpoints and must not download MovieLens or start an HTTP
   server.
+  Phase 9 API tests (`python_serving_api`, pytest + FastAPI TestClient)
+  use a tiny in-memory fixture artifact. Install
+  `python/requirements-serve-test.txt` before CTest. Do not download
+  MovieLens, do not regenerate `results/serving_latency.*` in CI, and
+  do not bind a public port. The load-test script is a measured local
+  run, not a CI job.

@@ -55,4 +55,12 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   nonzero exit; top-K is deterministic; scores are finite; ranking is
   score descending with `movie_id` ascending ties; GraphSAGE serve
   calls native `sample_neighbors` and does not download MovieLens.
+- Cover Phase 9 with pytest and FastAPI `TestClient` in
+  `test_serving_api.py` (CTest `python_serving_api`): tiny fixture
+  artifact, `/healthz`, `/recommend` rows (item id, title, score),
+  seen-item exclusion, tie-break, 404 for unknown users, 422 for
+  invalid queries, and GraphSAGE export calling native
+  `sample_neighbors`. Keep the module import-safe for unittest
+  discovery. Do not download MovieLens, bind a public port, or
+  rewrite `results/serving_latency.*` from the test.
 - Keep type hints on test helpers that form part of a public-looking fixture.
