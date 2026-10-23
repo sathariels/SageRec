@@ -16,6 +16,7 @@ choice, alternatives, rationale, and consequences.
 | ADR-007 | Published quality comparison | Multi-seed MF vs GraphSAGE with uncertainty / keep Phase 5 single-seed only | Accepted: 5-seed MovieLens 100K leaderboard (seeds include 7) |
 | ADR-008 | Production serving demo | Demo CLI / batch export / local HTTP API | Accepted: Demo CLI (HTTP prohibition superseded by ADR-009) |
 | ADR-009 | HTTP serving | Precomputed-embedding HTTP API / CLI only / per-request GraphSAGE | Accepted: FastAPI on offline embeddings (NumPy top-K) |
+| ADR-010 | Two-stage ranking | Retrieval plus learned re-rank / retrieval only / LightGBM on the request | Accepted: optional NumPy MLP re-rank of the embedding top-N |
 
 ## Accepted
 
@@ -448,6 +449,100 @@ checkpoint checks that do not bind a port.
   latency file, and does not bind a public port.
 - The ADR-008 demo CLI remains. Batch export stays rejected.
   MovieLens 1M, GCN, and node2vec remain deferred or rejected.
+  Optional re-ranking of the same embeddings is ADR-010. It does not
+  put sampling or training on the request path.
+
+### ADR-010: Two-stage retrieval and re-ranking
+
+- Date: 2026-10-23
+- Owner: Nithilan Kumaran
+- Status: Accepted
+
+**Context:** ADR-009 serves `GET /recommend` by an exact NumPy dot product
+over precomputed embeddings and returns top-K. A second ranker can reorder
+a short candidate list using features the embedding does not see directly
+(popularity, genre affinity, recency) without moving neighbor sampling or
+training onto the request. The re-ranker has to stay inside the MovieLens
+100K / ADR-003 protocol, keep held-out interactions out of its features,
+and remain optional so the ADR-009 path still answers when no re-rank
+artifact is loaded. LightGBM LambdaRank was the other concrete option.
+MovieLens 1M, GCN, node2vec, batch export, and FAISS stay out of scope.
+
+**Choice:** Two stages.
+
+- **Stage 1** is the existing embedding retrieval. Score is
+  `dot(user, item) + user_bias + item_bias`. Already-seen train positives
+  are removed. The stage keeps the top **N** unseen items (default
+  **N = 200**, configurable, and **N >= K**). Tie-break stays score
+  descending, then smaller item id.
+- **Stage 2** is a small NumPy MLP with one ReLU hidden layer and a linear
+  skip, trained with listwise softmax on that retrieved pool. It is not
+  LightGBM and not a PyTorch module, so the HTTP process stays free of
+  PyTorch, PyG, and `graph_sampler`.
+- Features, in order: retrieval score, train-only item popularity
+  (`log1p` count), train-only genre affinity (user mean genre vector dot
+  the item's MovieLens `u.item` flags), and train-only item recency
+  (min-max of the item's latest train timestamp). Validation and test
+  interactions do not enter those tables. If genres are absent the
+  affinity column is zero and the run records `genres_available: false`.
+  The MovieLens script requires `u.item`.
+- Training uses the ADR-003 split. The published stage-1 model is
+  implicit MF with `movielens_100k_config` (seed 7), which is the same
+  dot-product retrieval ADR-009 already serves. The MLP is fit on
+  validation items that stage 1 retrieved, with test positives removed
+  from those training pools. Test evaluation compares retrieval-only and
+  retrieval-plus-re-rank on the **same** stage-1 pool after removing
+  train and validation positives. Metrics are Recall@10, NDCG@10, and
+  MAP@10 (one relevant item: `1/rank` if the rank is <= 10, else 0).
+- Serving: `GET /recommend` gains `rerank` (default **false**) and `n`
+  (stage-1 width, default 200 or the artifact's `stage1_n`). `rerank=true`
+  requires `SAGEREC_RERANK_ARTIFACT`. The loaded artifact's user/item
+  counts and `stage1_model` must match the serving artifact. The request
+  does not train, sample, or read MovieLens. The returned `score` is the
+  re-rank score; `retrieval_score` is also returned. Seen items stay
+  excluded.
+- The load test records p50/p95/p99 and throughput for both modes. There
+  is no separate numeric SLO. The latency budget is that re-ranking is a
+  second in-process NumPy pass over N candidates using precomputed
+  tables, not a training or sampling step.
+
+**Alternatives:** Leave serving as retrieval only. Re-rank with LightGBM
+LambdaRank on the request path. Recompute GraphSAGE per request and then
+re-rank. Train the re-ranker on test labels.
+
+**Rationale:** The owner asked for two-stage retrieval and re-ranking on
+2026-10-23. Keeping stage 1 as the ADR-009 dot product means the candidate
+generator is already tested. A four-feature MLP is small enough to export
+as NumPy weights and run inside the existing latency budget without a new
+native library. LightGBM would put another native stack on the request
+and in the serving image. Fitting on validation and reporting on test
+keeps the held-out split honest. Default `rerank=false` preserves the
+ADR-009 response order when the flag is off.
+
+**Consequences:**
+
+- `python/sagerec_rerank.py` owns features, the MLP, the re-rank
+  artifact (`sagerec_rerank_artifact` version 1), and the in-memory
+  two-stage eval. It does not import PyTorch, PyG, or `graph_sampler`.
+- `python/sagerec_rerank_eval.py` and `scripts/run_rerank_eval.py` train
+  implicit MF on MovieLens 100K and write `results/rerank_eval.json`
+  (and the markdown rendered from it). That file is a single-seed
+  two-stage measurement. It does not replace
+  `results/mf_movielens_100k.json`, the Phase 5 comparison, or the
+  ADR-007 leaderboard, and it is not a GraphSAGE result.
+- `python/sagerec_api.py` accepts optional `rerank` and `n`. Unknown
+  users stay HTTP 404. `rerank=true` without an artifact, or `n < k`,
+  is HTTP 422.
+- `python/sagerec_loadtest.py` writes protocol `serving-latency-v2`
+  with both modes. The committed catalog is still synthetic noise at
+  MovieLens 100K cardinality, and the timed re-ranker is a seeded
+  synthetic MLP, not the MovieLens-trained weights. Do not hand-edit
+  those numbers. Top-level `latency_ms` duplicates retrieval-only.
+- Default CI runs the synthetic feature, MLP, and API tests. It does
+  not download MovieLens, does not run the 100K re-rank job, and does
+  not regenerate `results/serving_latency.*`.
+- Batch export, MovieLens 1M, GCN, node2vec, and FAISS remain rejected
+  or deferred.
 
 ## Proposals
 

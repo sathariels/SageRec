@@ -10,8 +10,10 @@ GraphSAGE training on that harness, the Phase 5 GNN-versus-MF
 comparison writer, the Phase 2 native-versus-reference sampler
 timing harness, Phase 6 PyG SAGEConv message passing on native
 samples, the ADR-007 multi-seed MF vs GraphSAGE aggregator, the ADR-008 demo
-CLI (`sagerec_serve`), and the ADR-009 HTTP serving layer
-(`sagerec_export`, `sagerec_serving`, `sagerec_api`, `sagerec_loadtest`).
+CLI (`sagerec_serve`), the ADR-009 HTTP serving layer
+(`sagerec_export`, `sagerec_serving`, `sagerec_api`, `sagerec_loadtest`),
+and the ADR-010 two-stage re-ranker (`sagerec_rerank`,
+`sagerec_rerank_eval`).
 
 ## Current slice
 
@@ -41,7 +43,8 @@ CLI (`sagerec_serve`), and the ADR-009 HTTP serving layer
   (NumPy logistic SGD). It trains on `train_positive_pairs()` only.
 - `sagerec_metrics.py` is the shared ranking evaluator: per-user then
   macro-averaged Recall@10 and NDCG@10, ADR-003 eligibility, and candidate
-  filtering.
+  filtering. `average_precision_at_k` is the binary AP used by the
+  ADR-010 MAP@10 comparison.
 - `sagerec_minibatch.py` is the Phase 4 harness: train-only
   `BipartiteCSR` from local pairs and seeded multi-hop expansion via
   native `graph_sampler.sample_neighbors` (ADR-005). GraphSAGE training
@@ -81,12 +84,24 @@ CLI (`sagerec_serve`), and the ADR-009 HTTP serving layer
   It must not import PyTorch, PyG, or `graph_sampler`. FAISS is not
   required.
 - `sagerec_api.py` is the FastAPI app: `GET /healthz` and
-  `GET /recommend`. Unknown users are HTTP 404. Do not sample or train
+  `GET /recommend`. Optional `rerank` (default false) and `n` select
+  the ADR-010 second stage. Unknown users are HTTP 404. `rerank=true`
+  without an artifact, or `n < k`, is HTTP 422. Do not sample or train
   on the request path.
 - `sagerec_loadtest.py` measures that endpoint and writes
-  `results/serving_latency.json` and `.md`. Do not hand-edit those
-  numbers. The default catalog is synthetic. Do not download MovieLens.
-- Do not implement node2vec, MovieLens 1M, GCN, or batch export.
+  `results/serving_latency.json` and `.md` (protocol
+  `serving-latency-v2`, both modes). Do not hand-edit those
+  numbers. The default catalog and the timed MLP are synthetic. Do not
+  download MovieLens.
+- `sagerec_rerank.py` owns train-only features, the NumPy listwise MLP,
+  the `sagerec_rerank_artifact` version 1 file, and in-memory two-stage
+  evaluation. It must not import PyTorch, PyG, LightGBM, or
+  `graph_sampler`.
+- `sagerec_rerank_eval.py` trains implicit MF on MovieLens 100K and
+  writes `results/rerank_eval.json`. It requires `u.item`. It does not
+  start HTTP and does not overwrite Phase 5 or Phase 7 files. Default
+  CI must not run this job.
+- Do not implement node2vec, MovieLens 1M, GCN, LightGBM, or batch export.
 
 ## Boundaries
 
@@ -166,3 +181,12 @@ CLI (`sagerec_serve`), and the ADR-009 HTTP serving layer
   importable by `unittest discover` without FastAPI installed at import
   time. Do not download MovieLens or regenerate
   `results/serving_latency.*` from tests. Do not bind a public port.
+- Phase 10 re-rank: `test_rerank.py` covers MAP@10, train-only
+  features (held-out rows do not change popularity), genre parsing, MLP
+  learning and seed determinism, artifact round-trip, and a tiny
+  two-stage eval. API tests cover `rerank=false` preserving order,
+  `rerank=true` reordering inside `n`, 422 when the artifact is missing
+  or `n < k`, 404 for an unknown user, and startup failure when
+  `stage1_model` does not match. Do not download MovieLens or run the
+  100K re-rank job in default CI. The committed `results/rerank_eval.*`
+  check only validates the stored file.

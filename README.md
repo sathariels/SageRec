@@ -4,16 +4,17 @@
 
 **Problem:** GraphSAGE training needs fast, seeded neighbor sampling on a leakage-safe user–movie graph. A PyG `NeighborLoader` wrapper would hide the systems work.
 
-**Result:** SageRec puts a real C++17 CSR sampler in the Python training loop, then compares GraphSAGE to implicit matrix factorization on the same MovieLens 100K protocol, then serves top-K from a checkpoint and from a precomputed-embedding HTTP API.
+**Result:** SageRec puts a real C++17 CSR sampler in the Python training loop, then compares GraphSAGE to implicit matrix factorization on the same MovieLens 100K protocol, then serves top-K from a checkpoint and from a precomputed-embedding HTTP API, with an optional second-stage re-ranker.
 
 | 6-second scan | Stored evidence |
 | --- | --- |
 | Native C++ `graph_sampler` is **111.177×** faster than a matching Python reference (median) | [`results/sampler_timing.md`](results/sampler_timing.md) |
 | GraphSAGE **beats** same-protocol MF on single-seed ML-100K **Recall@10** (0.047720 vs 0.038176, seed 7) | [`results/gnn_vs_mf_movielens_100k.md`](results/gnn_vs_mf_movielens_100k.md) |
+| Retrieval + re-rank **beats** retrieval-only on single-seed ML-100K **Recall@10** (0.053022 vs 0.038176; NDCG@10 0.026510 vs 0.020303; MAP@10 0.018500 vs 0.014950; seed 7) | [`results/rerank_eval.md`](results/rerank_eval.md) |
 | Demo CLI loads a checkpoint and prints top-K | [`scripts/demo_recommend.py`](scripts/demo_recommend.py) |
-| HTTP `GET /recommend` p50 / p95 / p99 is **19.909990 / 59.100509 / 85.913701 ms** (617.951794 req/s) | [`results/serving_latency.md`](results/serving_latency.md) |
+| HTTP `GET /recommend` retrieval-only p50 / p95 / p99 is **23.443567 / 66.870426 / 93.590268 ms** (534.012774 req/s); with re-rank **21.012950 / 66.638233 / 94.781428 ms** (568.753940 req/s) | [`results/serving_latency.md`](results/serving_latency.md) |
 
-Those figures are copied from committed `results/` (and the existing README tables below). They are **not** rounded further, **not** SOTA, and **not** production latency. Sampler timing is a synthetic CSR on one machine. The Recall@10 pair is Phase 5 single-seed provenance (in-repo mean layers); the 5-seed PyG `SAGEConv` leaderboard is a separate table.
+Those figures are copied from committed `results/` (and the existing README tables below). They are **not** rounded further, **not** SOTA, and **not** production latency. Sampler timing is a synthetic CSR on one machine. The GraphSAGE Recall@10 pair is Phase 5 single-seed provenance (in-repo mean layers); the 5-seed PyG `SAGEConv` leaderboard is a separate table. The re-rank row is a different comparison: implicit-MF retrieval versus the same top-200 pool after a NumPy MLP. It is not a GraphSAGE number. Stage-1 hit rate at 200 is 0.357370, so re-ranking never sees the other test items.
 
 Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/SageRec).
 
@@ -26,6 +27,7 @@ Public source: [github.com/sathariels/SageRec](https://github.com/sathariels/Sag
 5. **5-seed leaderboard** — seeds 7, 11, 13, 17, 19; mean ± sample std (ADR-007).
 6. **Demo CLI** — load a GraphSAGE or PairScorer checkpoint, score candidate movie IDs, print top-K (ADR-008).
 7. **HTTP API** — export those embeddings once, then `GET /recommend` with exact NumPy top-K (ADR-009).
+8. **Two-stage re-rank** — stage 1 keeps the top N candidates; a small NumPy MLP reorders them from train-only features (ADR-010). `rerank` defaults to off.
 
 ```mermaid
 flowchart LR
@@ -43,6 +45,7 @@ flowchart LR
     G --> S[Embedding export]
     H --> S
     S --> T[HTTP recommend API]
+    T --> U[Optional NumPy re-rank]
     D --> J[C++ vs Python timing charts]
     D --> R[Python reference sampler]
 ```
@@ -181,7 +184,40 @@ curl -s 'http://127.0.0.1:8000/healthz'
 curl -s 'http://127.0.0.1:8000/recommend?user_id=0&k=10'
 ```
 
-`GET /healthz` returns 200 when the artifact loaded. `GET /recommend` returns `item_id`, `title`, and `score`. An unknown `user_id` is HTTP 404. A missing or non-integer `user_id`, or `k < 1`, is HTTP 422.
+`GET /healthz` returns 200 when the artifact loaded (`rerank_loaded` says whether a re-rank artifact was also loaded). `GET /recommend` returns `item_id`, `title`, and `score`. An unknown `user_id` is HTTP 404. A missing or non-integer `user_id`, or `k < 1`, is HTTP 422.
+
+### Optional re-rank (ADR-010)
+
+`rerank` defaults to false, so the response order and scores stay the ADR-009 ranking. `rerank=true` asks the process to take the stage-1 top `n` (default 200, and `n` must be at least `k`) and reorder them with a NumPy MLP. The request does not sample neighbors and does not train. It needs a `sagerec_rerank_artifact` version 1 file whose user count, item count, and `stage1_model` match the serving artifact. Without that file, or with `n < k`, the status is HTTP 422.
+
+```bash
+PYTHONPATH=python python3 scripts/serve_api.py \
+  --artifact results/serving/embeddings.npz \
+  --rerank results/serving/rerank.npz \
+  --host 127.0.0.1 --port 8000
+curl -s 'http://127.0.0.1:8000/recommend?user_id=0&k=10&rerank=true&n=200'
+```
+
+Each re-ranked row still has `item_id`, `title`, and `score` (the re-rank score) and also `retrieval_score`. `make serve ARTIFACT=... RERANK=...` passes the same flag. The Docker image copies `python/sagerec_rerank.py`. Mount the artifact and set `SAGEREC_RERANK_ARTIFACT` when you want the second stage.
+
+Train and compare on MovieLens 100K (needs an existing ADR-003 `processed/` tree and `u.item`, extracted from the official zip when it is already under `data/raw/`):
+
+```bash
+PYTHONPATH=build:python python3 scripts/run_rerank_eval.py \
+  --processed-dir data/processed \
+  --raw-dir data/raw \
+  --rerank-out results/serving/rerank_movielens_100k.npz
+```
+
+That writes [`results/rerank_eval.json`](results/rerank_eval.json) and the markdown table rendered from it. Stage 1 is implicit MF (`movielens_100k_config`, seed 7), the same dot product this API serves. Stage 2 is fit on validation items inside the top-200 pool. Test metrics are Recall@10, NDCG@10, and MAP@10 for retrieval-only and retrieval plus re-rank on that same pool. The re-ranker cannot recover a test item that stage 1 missed. This is a single-seed measurement. It is not a GraphSAGE result and it does not replace the Phase 5 comparison or the ADR-007 leaderboard. `results/serving/` stays gitignored. Default CI does not run this script.
+
+Copied from [`results/rerank_eval.json`](results/rerank_eval.json). Protocol `rerank-eval-v1`. 943 eligible users. Stage-1 hit rate at 200 is 0.357370. The MLP saw 442 validation hits (the other users have no training label). Listwise loss moved from 5.181280 to 5.172139 (uniform over 200 items is about 5.30), so this is a light reordering, not a large fit. Retrieval-only Recall@10 and NDCG@10 match the stored single-seed MF file because N is at least 10 and the tie-break matches. Hardware: Intel(R) Xeon(R) Processor, 4 logical CPUs, Python 3.12.3, NumPy 1.26.4.
+
+| System | Recall@10 | NDCG@10 | MAP@10 |
+| --- | ---: | ---: | ---: |
+| retrieval only | 0.038176 | 0.020303 | 0.014950 |
+| retrieval + re-rank | 0.053022 | 0.026510 | 0.018500 |
+| delta (re-rank − retrieval) | 0.014846 | 0.006207 | 0.003550 |
 
 The same targets exist on the `Makefile` (`make export-embeddings CHECKPOINT=...`, `make serve ARTIFACT=...`, `make loadtest`, `make test-serving`, `make docker-build`). The image only runs the API:
 
@@ -195,16 +231,14 @@ docker run --rm -p 8000:8000 \
 
 ### Measured recommend latency
 
-Copied from [`results/serving_latency.json`](results/serving_latency.json) (markdown rendering in [`results/serving_latency.md`](results/serving_latency.md)). Protocol `serving-latency-v1`. Local uvicorn, httpx client, 1000 measured `GET /recommend` calls after 100 warm-up calls, concurrency 16, `k=10`, NumPy linear percentiles. Catalog: synthetic standard-normal embeddings, seed 7, 943 users, 1682 items, dim 16, 20 seen items per user. Those counts match public MovieLens 100K cardinality so the dot product is a similar size. The embeddings are not a trained model, and no ratings were read. Hardware: Intel(R) Xeon(R) Processor, 4 logical CPUs, Linux 6.12.94+, Python 3.12.3, NumPy 1.26.4, FastAPI 0.159.0, uvicorn 0.54.0, httpx 0.28.1.
+Copied from [`results/serving_latency.json`](results/serving_latency.json) (markdown rendering in [`results/serving_latency.md`](results/serving_latency.md)). Protocol `serving-latency-v2`. Local uvicorn, httpx client, 1000 measured `GET /recommend` calls per mode after 100 warm-up calls, concurrency 16, `k=10`, stage-1 N = 200, NumPy linear percentiles. Catalog: synthetic standard-normal embeddings, seed 7, 943 users, 1682 items, dim 16, 20 seen items per user. Those counts match public MovieLens 100K cardinality so the dot product is a similar size. The embeddings are not a trained model, and no ratings were read. The re-ranker timed here is a seeded synthetic MLP, not the MovieLens-trained weights. Hardware: Intel(R) Xeon(R) Processor, 4 logical CPUs, Linux 6.12.94+, Python 3.12.3, NumPy 1.26.4, FastAPI 0.159.0, uvicorn 0.54.0, httpx 0.28.1. Top-level `latency_ms` in the JSON duplicates retrieval-only.
 
-| Statistic | Value |
-| --- | ---: |
-| p50 | 19.909990 ms |
-| p95 | 59.100509 ms |
-| p99 | 85.913701 ms |
-| throughput | 617.951794 requests/s |
+| Mode | p50 ms | p95 ms | p99 ms | requests/s |
+| --- | ---: | ---: | ---: | ---: |
+| retrieval_only | 23.443567 | 66.870426 | 93.590268 | 534.012774 |
+| retrieval_plus_rerank | 21.012950 | 66.638233 | 94.781428 | 568.753940 |
 
-This is one-machine HTTP latency, not a service-level objective and not a ranking-quality claim. Regenerate with `PYTHONPATH=python python3 scripts/loadtest_serving.py` (that overwrites the committed files; do not hand-edit them).
+This is one-machine HTTP latency, not a service-level objective and not a ranking-quality claim. The MLP is a second in-process NumPy pass over 200 candidates. On this run the re-rank p50 is not higher than retrieval-only; the gap is inside HTTP variance, so it is not evidence that re-ranking is faster. Regenerate with `PYTHONPATH=python python3 scripts/loadtest_serving.py` (that overwrites the committed files; do not hand-edit them).
 
 API tests (pytest + `TestClient`, tiny fixture, no public port):
 
@@ -244,22 +278,23 @@ If `files.grouplens.org` presents an expired TLS certificate, the downloader ret
 | Scoring protocol | [`python/sagerec_scoring.py`](python/sagerec_scoring.py) — `PairScorer` for baseline and GraphSAGE |
 | Training negatives | [`python/sagerec_negatives.py`](python/sagerec_negatives.py) — exclude known positives in the caller-supplied scope |
 | MF baseline | [`python/sagerec_baseline.py`](python/sagerec_baseline.py) — seeded NumPy logistic SGD |
-| Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10 |
+| Ranking metrics | [`python/sagerec_metrics.py`](python/sagerec_metrics.py) — per-user then macro-averaged Recall@10 and NDCG@10; binary AP@k for the ADR-010 MAP@10 comparison |
 | Mini-batch harness | [`python/sagerec_minibatch.py`](python/sagerec_minibatch.py) — train-only CSR + native multi-hop `sample_neighbors` |
 | GraphSAGE trainer | [`python/sagerec_graphsage.py`](python/sagerec_graphsage.py) — PyG `SAGEConv` + `PairScorer` on native samples |
 | Demo CLI | [`python/sagerec_serve.py`](python/sagerec_serve.py) + [`scripts/demo_recommend.py`](scripts/demo_recommend.py) — schema-v1 checkpoint load, candidate scores, top-K print (ADR-008) |
 | HTTP serving | [`python/sagerec_export.py`](python/sagerec_export.py), [`python/sagerec_serving.py`](python/sagerec_serving.py), [`python/sagerec_api.py`](python/sagerec_api.py) — offline embeddings, NumPy top-K, `GET /recommend` (ADR-009) |
+| Two-stage re-rank | [`python/sagerec_rerank.py`](python/sagerec_rerank.py) — train-only features and a NumPy listwise MLP; optional `rerank` on `GET /recommend` (ADR-010) |
 | Comparison writer | [`python/sagerec_compare.py`](python/sagerec_compare.py) — MF vs GraphSAGE JSON, markdown table, SVG chart from stored results |
 | Multi-seed aggregator | [`python/sagerec_multiseed.py`](python/sagerec_multiseed.py) — per-seed rows plus mean±sample std (ADR-007) |
 | Sampler timing | [`python/sagerec_sampler_benchmark.py`](python/sagerec_sampler_benchmark.py) — native vs reference `sample_neighbors` JSON/SVG |
 
 Callers must pass **training-positive** `local_pairs()` into `BipartiteCSR`. The reference sampler reads CSR `offsets`/`neighbors`; it does not build graphs or ingest ratings files.
 
-Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/serve/HTTP/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed/demo-CLI/export/serve/load-test launchers.
+Layout: [`cpp/`](cpp/) native core, [`python/`](python/) prep/baseline/metrics/mini-batch/GraphSAGE/serve/HTTP/re-rank/comparison/multi-seed/benchmark/tests, [`docs/`](docs/) contracts and ADRs, [`data/`](data/) schemas (no raw dataset), [`results/`](results/) for metrics and charts, [`scripts/`](scripts/) thin download/prep/MF/GraphSAGE/timing/multi-seed/demo-CLI/export/serve/load-test/re-rank launchers.
 
-**In this repo:** C++ CSR + seeded sampler, MovieLens 100K parser/download/prep, native mini-batch GraphSAGE (`SAGEConv`), implicit MF, shared evaluator, single-seed and 5-seed comparisons, sampler timing charts, demo CLI, HTTP serving on precomputed embeddings, Release CMake + GitHub Actions CI.
+**In this repo:** C++ CSR + seeded sampler, MovieLens 100K parser/download/prep, native mini-batch GraphSAGE (`SAGEConv`), implicit MF, shared evaluator, single-seed and 5-seed comparisons, sampler timing charts, demo CLI, HTTP serving on precomputed embeddings, optional NumPy re-ranker, Release CMake + GitHub Actions CI.
 
-**Not in this repo:** PyG NeighborLoader / ClusterLoader (rejected for primary experiments), batch export, MovieLens 1M, GCN, node2vec.
+**Not in this repo:** PyG NeighborLoader / ClusterLoader (rejected for primary experiments), batch export, MovieLens 1M, GCN, node2vec, LightGBM on the request path.
 
 The MF ranking smoke unittest is a tiny synthetic path. MovieLens 100K implicit-MF and GraphSAGE metrics (Recall@10 / NDCG@10) with split, seed, hyperparameter, and eligibility provenance are stored under [`results/`](results/). Phase 5 files are **single-seed** historical provenance. The ADR-007 leaderboard is a separate 5-seed SAGEConv measurement with mean±sample std. The MF JSON is not a GraphSAGE result.
 
@@ -278,6 +313,7 @@ Recorded in [`docs/decisions.md`](docs/decisions.md):
 | ADR-007 | Accepted | 5-seed MovieLens 100K MF vs GraphSAGE leaderboard (seeds 7, 11, 13, 17, 19) |
 | ADR-008 | Accepted | Demo CLI (load checkpoint, score candidates, print top-K). HTTP prohibition superseded by ADR-009. Not batch export |
 | ADR-009 | Accepted | HTTP API on precomputed embeddings (`GET /recommend`, `/healthz`); NumPy top-K; FAISS not required |
+| ADR-010 | Accepted | Two-stage retrieval and re-ranking: embedding top-N, then an optional NumPy MLP. `rerank` defaults to false. Not LightGBM |
 
 The native and Python reference samplers implement ADR-005 (full neighborhood when `k >= degree`; empty for isolated nodes or `k = 0`). Changing replacement policy requires a superseding ADR.
 
@@ -300,7 +336,7 @@ ctest --test-dir build --output-on-failure --build-config Release
 
 Use `g++` (or another complete C++17 toolchain). A `c++` symlink that points at Clang without a discoverable `libstdc++` will fail at configure time.
 
-CTest runs native CSR/sampler/parser tests, Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation, demo-CLI checkpoint/top-K), and pytest `python_serving_api` (FastAPI `TestClient`). Install `python/requirements-serve-test.txt` before that pytest target. After a successful build:
+CTest runs native CSR/sampler/parser tests, Python unittest discovery (bindings, sampler parity, leave-one-out leakage, download/prep fixtures, MF ranking smoke, mini-batch native sampling, GraphSAGE training smoke, sampler timing schema/parity, multi-seed aggregation, demo-CLI checkpoint/top-K, re-rank features/MLP), and pytest `python_serving_api` (FastAPI `TestClient`, including optional `rerank`). Install `python/requirements-serve-test.txt` before that pytest target. After a successful build:
 
 ```bash
 PYTHONPATH=build:python python3 -m unittest discover -s python/tests -v
@@ -313,6 +349,7 @@ PYTHONPATH=build:python python3 -m unittest python/tests/test_multiseed_gnn_vs_m
 PYTHONPATH=build:python python3 -m unittest python/tests/test_sampler_benchmark.py -v
 PYTHONPATH=build:python python3 -m unittest python/tests/test_serve_demo.py -v
 PYTHONPATH=build:python python3 -m pytest python/tests/test_serving_api.py -q
+PYTHONPATH=build:python python3 -m unittest python/tests/test_rerank.py -v
 ```
 
 Default CI does **not** download MovieLens. Set `SAGEREC_LIVE_MOVIELENS=1` only for the optional live-archive test.
@@ -342,7 +379,8 @@ The mini-batch helper in [`python/sagerec_minibatch.py`](python/sagerec_minibatc
 - Native vs Python reference sampler timings are stored under `results/sampler_timing.json` (synthetic graph, median of measured repetitions). They are one-machine evidence, not a production latency or SOTA claim.
 - Production message passing is PyG `SAGEConv` on native mini-batches (ADR-006). PyG NeighborLoader is not the neighborhood source.
 - The ADR-008 demo CLI loads a local checkpoint and prints top-K. It is not a batch exporter and not a production latency claim.
-- ADR-009 HTTP latency is stored under `results/serving_latency.json` (synthetic catalog, one machine, p50/p95/p99 and throughput). It is not a ranking-quality result and not a service-level objective.
+- ADR-009 HTTP latency is stored under `results/serving_latency.json` (synthetic catalog, one machine, p50/p95/p99 and throughput for retrieval-only and for retrieval plus a synthetic re-ranker; protocol `serving-latency-v2`). It is not a ranking-quality result and not a service-level objective. Top-level latency duplicates the retrieval-only mode.
+- The ADR-010 MovieLens comparison is stored under `results/rerank_eval.json` (single-seed implicit MF retrieval versus the same pool after a NumPy MLP). It is not GraphSAGE and does not replace Phase 5 or the 5-seed leaderboard. MAP is MAP@10. The re-ranker is trained on validation labels inside top-N (442 of 943 users) and cannot recover items stage 1 missed (hit rate at 200 is 0.357370). Listwise loss stayed near log(200).
 - This GitHub repository is the public homepage. Do not treat an Origin (or other private) URL as the project home.
 
 Acceptance criteria and component contracts: [`docs/project-requirements.md`](docs/project-requirements.md), [`docs/architecture.md`](docs/architecture.md). Contributors: read [`AGENTS.md`](AGENTS.md) before changing code.

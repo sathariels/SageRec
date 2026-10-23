@@ -246,6 +246,10 @@ does not use a PyG NeighborLoader.
     artifact and answer `GET /recommend` from FastAPI (ADR-009). Request
     time is a NumPy dot product. Native sampling runs at export, not per
     request.
+11. Optionally re-rank the stage-1 top-N with a NumPy MLP trained on
+    train-only features (ADR-010). The MovieLens comparison uses implicit
+    MF as stage 1 and reports test Recall@10, NDCG@10, and MAP@10.
+    Request time stays a second NumPy pass; it does not train or sample.
 
 The GNN family is GraphSAGE (ADR-002). Production message passing is PyG
 `SAGEConv` (ADR-006) on CPU, still fed by native samples. Ranking on 100K
@@ -311,9 +315,47 @@ The runtime image (`Dockerfile`) contains that app and the artifact
 loader only.
 
 `results/serving_latency.json` and `.md` are a measured local load test
-(p50/p95/p99 and throughput) with CPU provenance. The committed catalog
-is synthetic noise at MovieLens 100K user/item counts. It is not a
-ranking-quality result and not a production latency claim.
+(p50/p95/p99 and throughput) with CPU provenance. Protocol
+`serving-latency-v2` records retrieval-only and retrieval-plus-re-rank.
+Top-level `latency_ms` duplicates retrieval-only. The committed catalog
+is synthetic noise at MovieLens 100K user/item counts, and the timed
+re-ranker is a seeded synthetic MLP. It is not a ranking-quality result
+and not a production latency claim.
+
+## Two-stage re-ranking (ADR-010)
+
+Stage 1 is the ADR-009 score
+(`dot(user, item) + user_bias + item_bias`). Already-seen train
+positives are removed. The stage keeps the top N unseen items (default
+200, and N >= K). Ties stay score descending, then smaller item id.
+
+Stage 2 is `python/sagerec_rerank.py`: a NumPy MLP with one ReLU hidden
+layer and a linear skip,
+`relu(x W1 + b1) W2 + b2 + x w_linear`, on standardized features.
+Feature order is retrieval score, train-only `log1p` item popularity,
+train-only genre affinity (user mean genre vector dot the item's
+`u.item` flags), and train-only item recency (min-max of the item's
+latest train timestamp). Validation and test rows do not enter those
+tables. The MLP is trained with listwise softmax on validation items
+that stage 1 retrieved. Test pools drop the validation item. The
+re-ranker cannot recover an item outside top-N.
+
+The published MovieLens comparison
+(`python/sagerec_rerank_eval.py`, `results/rerank_eval.json`) uses
+implicit MF (`movielens_100k_config`, seed 7) as stage 1 because that
+is the dot product ADR-009 already serves. It reports Recall@10,
+NDCG@10, and MAP@10 for retrieval-only and retrieval-plus-re-rank on
+the same stage-1 pool. MAP@10 with one relevant item is `1/rank` when
+the rank is at most 10, else 0. That file is single-seed and is not a
+GraphSAGE result and not the ADR-007 leaderboard.
+
+`GET /recommend` adds `rerank` (default false) and `n`. With the flag
+off the response order and scores match ADR-009. With the flag on, the
+process loads `SAGEREC_RERANK_ARTIFACT` (`sagerec_rerank_artifact`
+version 1), checks user/item counts and `stage1_model`, and returns
+`score` (re-rank) plus `retrieval_score`. A missing artifact or `n < k`
+is HTTP 422. Unknown users stay HTTP 404. The request does not import
+PyTorch, PyG, LightGBM, or `graph_sampler`.
 
 ## Evaluation boundary
 
@@ -333,7 +375,10 @@ The shared protocol for this slice:
   split is test. The evaluation positive stays in the candidate set.
 - Rank by score descending; ties break on smaller `movie_id`
   (the ADR-008 demo CLI uses this same tie-break).
-- Report Recall@10 and NDCG@10 per user, then macro-average.
+- Report Recall@10 and NDCG@10 per user, then macro-average. The
+  ADR-010 two-stage comparison also reports MAP@10 on the stage-1 pool
+  (one relevant item). That MAP does not replace the GNN-versus-MF
+  Recall@10 / NDCG@10 protocol.
 - Tiny synthetic unittest metrics are protocol verification, not a
   MovieLens 100K quality claim. Stored 100K numbers live under `results/`
   with provenance. Phase 5 single-seed files are

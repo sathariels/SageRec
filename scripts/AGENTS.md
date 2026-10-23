@@ -63,9 +63,22 @@ Opened Phase 9 HTTP serving (ADR-009):
   or bind a port.
 - `serve_api.py` — serve `GET /recommend` from that artifact. Delegates
   to uvicorn and `python/sagerec_api.py`.
-- `loadtest_serving.py` — measure p50/p95/p99 and throughput and write
-  `results/serving_latency.json` and `.md`. Default catalog is
-  synthetic. Does not download MovieLens. Do not hand-edit the output.
+- `loadtest_serving.py` — measure p50/p95/p99 and throughput for
+  retrieval-only and retrieval-plus-re-rank, and write
+  `results/serving_latency.json` and `.md` (`serving-latency-v2`).
+  Default catalog and re-ranker are synthetic. Does not download
+  MovieLens. Do not hand-edit the output.
+
+Opened Phase 10 two-stage re-ranking (ADR-010):
+
+- `run_rerank_eval.py` — train implicit MF on MovieLens 100K, fit the
+  NumPy MLP on validation labels inside the stage-1 pool, and write
+  `results/rerank_eval.json` and `.md`. Requires `u.item` (extracted
+  from the official zip when it is already on disk). Does not download
+  on its own beyond `ensure_movielens_100k_processed`, does not start
+  HTTP, and does not overwrite Phase 5 or Phase 7 files. Optional
+  `--rerank-out` writes a gitignored artifact under `results/serving/`.
+  Not a default CI job.
 
 Do not add MovieLens 1M scripts. The Phase 4 mini-batch helper lives in
 `python/sagerec_minibatch.py`. GraphSAGE training lives in
@@ -74,4 +87,6 @@ neighborhoods). Sampler timing logic lives in
 `python/sagerec_sampler_benchmark.py`. Demo serving lives in
 `python/sagerec_serve.py`. HTTP serving lives in `python/sagerec_api.py`
 and `python/sagerec_serving.py`. Embedding export lives in
-`python/sagerec_export.py`.
+`python/sagerec_export.py`. Two-stage features and the MLP live in
+`python/sagerec_rerank.py`. The MovieLens comparison lives in
+`python/sagerec_rerank_eval.py`.

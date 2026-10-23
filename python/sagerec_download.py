@@ -151,8 +151,21 @@ def verify_md5(data: bytes, expected_md5: str, *, label: str) -> str:
     return actual
 
 
+def extract_uitem(archive_bytes: bytes) -> tuple[bytes, str]:
+    """Return ``(u.item bytes, zip member name)`` from a 100K zip.
+
+    Genre flags for ADR-010 live in ``u.item``. This does not parse them and
+    does not download the archive.
+    """
+    return _extract_named_member(archive_bytes, "u.item")
+
+
 def extract_udata(archive_bytes: bytes) -> tuple[bytes, str]:
     """Return ``(u.data bytes, zip member name)`` from a 100K zip."""
+    return _extract_named_member(archive_bytes, "u.data")
+
+
+def _extract_named_member(archive_bytes: bytes, filename: str) -> tuple[bytes, str]:
     try:
         archive = zipfile.ZipFile(io.BytesIO(archive_bytes))
     except zipfile.BadZipFile as exc:
@@ -165,21 +178,22 @@ def extract_udata(archive_bytes: bytes) -> tuple[bytes, str]:
         matches = [
             name
             for name in names
-            if Path(name).name == "u.data" and not name.endswith("/")
+            if Path(name).name == filename and not name.endswith("/")
         ]
         if not matches:
             preview = ", ".join(names[:12]) or "(empty zip)"
             raise MovieLensDownloadError(
-                "zip layout is not MovieLens 100K: no member named u.data. "
+                f"zip layout is not MovieLens 100K: no member named {filename}. "
                 f"Archive members include: {preview}"
             )
+        preferred_suffix = f"ml-100k/{filename}"
         preferred = next(
-            (name for name in matches if name.replace("\\", "/").endswith("ml-100k/u.data")),
+            (name for name in matches if name.replace("\\", "/").endswith(preferred_suffix)),
             matches[0],
         )
-        if len(matches) > 1 and not preferred.replace("\\", "/").endswith("ml-100k/u.data"):
+        if len(matches) > 1 and not preferred.replace("\\", "/").endswith(preferred_suffix):
             raise MovieLensDownloadError(
-                "zip contains multiple u.data members and none is ml-100k/u.data: "
+                f"zip contains multiple {filename} members and none is {preferred_suffix}: "
                 + ", ".join(matches)
             )
         try:

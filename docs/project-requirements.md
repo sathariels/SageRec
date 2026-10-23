@@ -70,7 +70,17 @@ both recommendation quality and measured native sampling performance.
   train positives and return item id, title, and score. Unknown users
   return 404. Top-K is exact NumPy; FAISS is not required.
 - Record a measured load test (p50/p95/p99 and throughput) with hardware
-  provenance. Do not hand-edit those numbers.
+  provenance, for retrieval-only and for retrieval plus re-rank
+  (ADR-010). Do not hand-edit those numbers.
+- Provide an optional second stage (ADR-010): stage 1 returns the top N
+  unseen items from the embedding scores (default N = 200, N >= K);
+  stage 2 is a small learned re-ranker using train-only features
+  (retrieval score, item popularity, genre affinity, recency). The
+  MovieLens comparison uses the ADR-003 split, trains on validation
+  labels inside the stage-1 pool, and reports test Recall@10, NDCG@10,
+  and MAP@10 for retrieval-only versus retrieval plus re-rank under
+  `results/rerank_eval.json`. `GET /recommend` keeps `rerank` off by
+  default. Do not put training or neighbor sampling on the request.
 - Do not add batch export unless a superseding ADR accepts it.
 
 ### Performance benchmark

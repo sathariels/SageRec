@@ -1,10 +1,11 @@
-"""Local HTTP load test for the ADR-009 serving API.
+"""Local HTTP load test for ADR-009 retrieval and ADR-010 re-ranking.
 
 Starts a uvicorn subprocess on a synthetic catalog (or a caller-supplied
 artifact), issues concurrent ``GET /recommend`` requests with httpx, and
-writes p50/p95/p99 latency plus throughput. Default user and item counts
-match the public MovieLens 100K cardinality so the NumPy dot product is a
-similar size. Embeddings are seeded noise, not a trained model.
+writes p50/p95/p99 latency plus throughput for retrieval-only and for
+retrieval plus re-rank. Default user and item counts match the public
+MovieLens 100K cardinality. Embeddings and the re-rank MLP are seeded
+noise, not a trained model.
 
 This module does not download MovieLens and does not import ``graph_sampler``.
 httpx and uvicorn are imported only when a load test runs.
@@ -31,10 +32,12 @@ from typing import Any
 
 import numpy as np
 
+import sagerec_rerank as rerank
 import sagerec_serving as serving
 
-PROTOCOL_VERSION = "serving-latency-v1"
-ADR_ID = "ADR-009"
+PROTOCOL_VERSION = "serving-latency-v2"
+ADR_ID = "ADR-010"
+RETRIEVAL_ADR = "ADR-009"
 DEFAULT_NUM_USERS = 943
 DEFAULT_NUM_ITEMS = 1682
 DEFAULT_EMBEDDING_DIM = 16
@@ -44,7 +47,9 @@ DEFAULT_REQUESTS = 1000
 DEFAULT_WARMUP = 100
 DEFAULT_CONCURRENCY = 16
 DEFAULT_K = serving.DEFAULT_K
+DEFAULT_STAGE1_N = rerank.DEFAULT_STAGE1_N
 PERCENTILE_METHOD = "linear"
+LATENCY_MODES = ("retrieval_only", "retrieval_plus_rerank")
 
 REQUIRED_LATENCY_KEYS = (
     "benchmark",
@@ -58,6 +63,7 @@ REQUIRED_LATENCY_KEYS = (
     "wall_seconds",
     "n_requests",
     "n_errors",
+    "modes",
     "cpu",
     "platform",
     "python",
@@ -158,22 +164,37 @@ def build_latency_payload(
     wall_seconds: float,
     n_requests: int,
     n_errors: int,
+    modes: Mapping[str, Any],
     root: Path | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Machine-readable serving-latency record. Does not invent timings."""
+    """Machine-readable serving-latency record. Does not invent timings.
+
+    Top-level latency fields duplicate ``modes['retrieval_only']``. The
+    re-rank mode lives under ``modes['retrieval_plus_rerank']``.
+    """
     root = repo_root() if root is None else root
+    missing_modes = [name for name in LATENCY_MODES if name not in modes]
+    if missing_modes:
+        raise LoadTestError(f"latency modes missing {missing_modes}")
     dirty = git_dirty(root)
     note = (
-        "One-machine ADR-009 HTTP latency for GET /recommend on a local "
-        "uvicorn process. Top-K is exact NumPy over precomputed embeddings. "
-        "Not a ranking-quality result, not sampler timing, and not a "
-        "production SLO."
+        "One-machine HTTP latency for GET /recommend on a local uvicorn "
+        "process, measured twice: retrieval-only (ADR-009 NumPy top-K) and "
+        "retrieval plus re-rank (ADR-010 MLP over the stage-1 pool). "
+        "Top-level latency_ms duplicates retrieval_only. Not a "
+        "ranking-quality result, not sampler timing, and not a production SLO."
     )
     if catalog.get("kind") == "synthetic":
         note += (
             " The catalog is seeded synthetic noise with MovieLens 100K "
             "user/item counts; no ratings were read."
+        )
+    if catalog.get("rerank_kind") == "synthetic":
+        note += (
+            " The re-ranker is a seeded synthetic MLP over synthetic "
+            "popularity, genre, and recency tables, not the MovieLens-trained "
+            "model."
         )
     if dirty:
         note += (
@@ -184,6 +205,7 @@ def build_latency_payload(
         "benchmark": "sagerec_http_recommend",
         "protocol_version": PROTOCOL_VERSION,
         "adr": ADR_ID,
+        "retrieval_adr": RETRIEVAL_ADR,
         "endpoint": "GET /recommend",
         "catalog": dict(catalog),
         "workload": dict(workload),
@@ -192,6 +214,7 @@ def build_latency_payload(
         "wall_seconds": float(wall_seconds),
         "n_requests": int(n_requests),
         "n_errors": int(n_errors),
+        "modes": {name: dict(modes[name]) for name in LATENCY_MODES},
         "cpu": cpu_info(),
         "platform": {
             "system": platform.system(),
@@ -221,12 +244,23 @@ def render_serving_latency_markdown(payload: Mapping[str, Any]) -> str:
     def fmt(value: float) -> str:
         return f"{float(value):.6f}"
 
+    modes = payload["modes"]
+    for mode_name in LATENCY_MODES:
+        if mode_name not in modes:
+            raise LoadTestError(f"latency payload is missing modes.{mode_name}")
+        mode_latency = modes[mode_name]["latency_ms"]
+        for key in ("p50", "p95", "p99", "mean"):
+            if key not in mode_latency:
+                raise LoadTestError(f"modes.{mode_name}.latency_ms is missing {key}")
+
     lines = [
         "# SageRec HTTP recommend latency",
         "",
-        "One-machine ADR-009 measurement of `GET /recommend` against a local "
-        "uvicorn process. Top-K is exact NumPy. Not a ranking-quality result "
-        "and not a production SLO.",
+        "One-machine measurement of `GET /recommend` against a local uvicorn "
+        "process. Retrieval-only is ADR-009 NumPy top-K. Retrieval plus "
+        "re-rank is the ADR-010 MLP over the stage-1 pool. Not a "
+        "ranking-quality result and not a production SLO. Top-level numbers "
+        "in the JSON duplicate retrieval-only.",
         "",
         f"- Protocol: `{payload['protocol_version']}` ({payload['adr']})",
         (
@@ -235,9 +269,10 @@ def render_serving_latency_markdown(payload: Mapping[str, Any]) -> str:
             f"seed {catalog.get('seed')}"
         ),
         (
-            f"- Workload: {workload['n_requests']} measured requests, "
+            f"- Workload: {workload['n_requests']} measured requests per mode, "
             f"{workload['warmup_requests']} warm-up, concurrency "
-            f"{workload['concurrency']}, k={workload['k']}"
+            f"{workload['concurrency']}, k={workload['k']}, "
+            f"stage1_n={workload.get('stage1_n')}"
         ),
         f"- Percentile method: `{latency['percentile_method']}`",
         (
@@ -247,19 +282,24 @@ def render_serving_latency_markdown(payload: Mapping[str, Any]) -> str:
         ),
         f"- Commit: `{payload['git_commit']}` (dirty={payload['git_dirty']})",
         "",
-        "| Statistic | Value |",
-        "| --- | ---: |",
-        f"| p50 ms | {fmt(latency['p50'])} |",
-        f"| p95 ms | {fmt(latency['p95'])} |",
-        f"| p99 ms | {fmt(latency['p99'])} |",
-        f"| mean ms | {fmt(latency['mean'])} |",
-        f"| throughput requests/s | {fmt(payload['throughput_requests_per_s'])} |",
-        f"| wall seconds | {fmt(payload['wall_seconds'])} |",
-        f"| errors | {payload['n_errors']} |",
-        "",
-        payload["note"],
-        "",
+        "| Mode | p50 ms | p95 ms | p99 ms | requests/s |",
+        "| --- | ---: | ---: | ---: | ---: |",
     ]
+    for mode_name in LATENCY_MODES:
+        mode = modes[mode_name]
+        mode_latency = mode["latency_ms"]
+        lines.append(
+            f"| {mode_name} | {fmt(mode_latency['p50'])} | "
+            f"{fmt(mode_latency['p95'])} | {fmt(mode_latency['p99'])} | "
+            f"{fmt(mode['throughput_requests_per_s'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            payload["note"],
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -318,6 +358,7 @@ async def _collect_latencies(
     k: int,
     concurrency: int,
     warmup: int,
+    extra_params: Mapping[str, Any] | None = None,
 ) -> tuple[list[float], int, float]:
     import httpx
 
@@ -334,10 +375,10 @@ async def _collect_latencies(
         async def one(user_id: int) -> tuple[int, float]:
             async with semaphore:
                 started = time.perf_counter()
-                response = await client.get(
-                    "/recommend",
-                    params={"user_id": int(user_id), "k": int(k)},
-                )
+                params: dict[str, Any] = {"user_id": int(user_id), "k": int(k)}
+                if extra_params:
+                    params.update(dict(extra_params))
+                response = await client.get("/recommend", params=params)
                 elapsed = time.perf_counter() - started
                 return response.status_code, elapsed
 
@@ -364,9 +405,41 @@ async def _collect_latencies(
     return latencies, errors, wall_seconds
 
 
+def _mode_record(
+    *,
+    rerank_enabled: bool,
+    stage1_n: int | None,
+    latencies: Sequence[float],
+    n_errors: int,
+    wall_seconds: float,
+    n_requests: int,
+) -> dict[str, Any]:
+    if n_errors:
+        raise LoadTestError(
+            f"{n_errors} recommend requests failed; refusing to write latency results"
+        )
+    if len(latencies) != n_requests:
+        raise LoadTestError(
+            f"expected {n_requests} latency samples, got {len(latencies)}"
+        )
+    throughput = float(n_requests) / float(wall_seconds) if wall_seconds > 0 else 0.0
+    record: dict[str, Any] = {
+        "rerank": bool(rerank_enabled),
+        "latency_ms": latency_percentiles_ms(latencies),
+        "throughput_requests_per_s": throughput,
+        "wall_seconds": float(wall_seconds),
+        "n_requests": int(n_requests),
+        "n_errors": int(n_errors),
+    }
+    if rerank_enabled:
+        record["stage1_n"] = int(stage1_n if stage1_n is not None else DEFAULT_STAGE1_N)
+    return record
+
+
 def run_http_load_test(
     *,
     artifact_path: str | Path | None = None,
+    rerank_path: str | Path | None = None,
     num_users: int = DEFAULT_NUM_USERS,
     num_items: int = DEFAULT_NUM_ITEMS,
     embedding_dim: int = DEFAULT_EMBEDDING_DIM,
@@ -376,22 +449,31 @@ def run_http_load_test(
     warmup_requests: int = DEFAULT_WARMUP,
     concurrency: int = DEFAULT_CONCURRENCY,
     k: int = DEFAULT_K,
+    stage1_n: int = DEFAULT_STAGE1_N,
     json_out: str | Path | None = None,
     md_out: str | Path | None = None,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Measure recommend latency and write JSON plus markdown.
+    """Measure recommend latency with and without re-ranking.
 
     When ``artifact_path`` is omitted, a synthetic catalog is written to a
     temporary file and deleted afterward. The committed default uses that
-    synthetic catalog.
+    synthetic catalog plus a synthetic re-rank MLP. ``stage1_n`` is the
+    pool width for the re-rank requests.
     """
     root = repo_root() if root is None else Path(root)
-    if n_requests < 1 or warmup_requests < 0 or concurrency < 1 or k < 1:
+    if (
+        n_requests < 1
+        or warmup_requests < 0
+        or concurrency < 1
+        or k < 1
+        or stage1_n < k
+    ):
         raise LoadTestError(
-            "n_requests and concurrency and k must be >= 1, and warmup must be >= 0, "
+            "n_requests, concurrency, and k must be >= 1, warmup must be >= 0, "
+            "and stage1_n must be >= k, "
             f"got n_requests={n_requests}, warmup={warmup_requests}, "
-            f"concurrency={concurrency}, k={k}"
+            f"concurrency={concurrency}, k={k}, stage1_n={stage1_n}"
         )
     python_dir = root / "python"
     if json_out is None:
@@ -419,6 +501,7 @@ def run_http_load_test(
             "seen_per_user": seen_per_user,
             "seed": seed,
             "model": index.metadata["model"],
+            "rerank_kind": "synthetic" if rerank_path is None else "provided",
         }
     else:
         artifact = Path(artifact_path)
@@ -432,7 +515,30 @@ def run_http_load_test(
             "seed": index.metadata.get("seed"),
             "model": index.metadata["model"],
             "artifact_file": artifact.name,
+            "rerank_kind": "synthetic" if rerank_path is None else "provided",
         }
+
+    rerank_temp: tempfile.TemporaryDirectory[str] | None = None
+    if rerank_path is None:
+        rerank_temp = tempfile.TemporaryDirectory(prefix="sagerec-rerank-")
+        rerank_file = Path(rerank_temp.name) / "rerank.npz"
+        bundle = rerank.build_synthetic_rerank_bundle(
+            num_users=index.num_users,
+            num_items=index.num_items,
+            seed=seed,
+            stage1_model=str(index.metadata["model"]),
+            stage1_n=stage1_n,
+        )
+        rerank.save_rerank_artifact(rerank_file, bundle)
+    else:
+        rerank_file = Path(rerank_path)
+        bundle = rerank.load_rerank_artifact(rerank_file)
+        rerank.assert_rerank_compatible(
+            bundle,
+            num_users=index.num_users,
+            num_items=index.num_items,
+            stage1_model=str(index.metadata["model"]),
+        )
 
     port = _free_port()
     base_url = f"http://127.0.0.1:{port}"
@@ -442,6 +548,7 @@ def run_http_load_test(
     env = os.environ.copy()
     env["PYTHONPATH"] = str(python_dir) + os.pathsep + env.get("PYTHONPATH", "")
     env["SAGEREC_SERVING_ARTIFACT"] = str(artifact.resolve())
+    env["SAGEREC_RERANK_ARTIFACT"] = str(rerank_file.resolve())
     command = [
         sys.executable,
         "-m",
@@ -471,29 +578,43 @@ def run_http_load_test(
                 f"/healthz num_users {health['num_users']} does not match "
                 f"the artifact ({index.num_users})"
             )
+        if health.get("rerank_loaded") is not True:
+            raise LoadTestError(
+                "/healthz did not report rerank_loaded=true. The load test "
+                "measures both modes and needs SAGEREC_RERANK_ARTIFACT."
+            )
         rng = np.random.default_rng(seed)
-        user_ids = rng.integers(0, index.num_users, size=warmup_requests + n_requests)
-        latencies, n_errors, wall_seconds = asyncio.run(
-            _collect_latencies(
-                base_url,
-                [int(user_id) for user_id in user_ids],
-                k=k,
-                concurrency=concurrency,
-                warmup=warmup_requests,
+        user_ids = [int(user_id) for user_id in rng.integers(
+            0, index.num_users, size=warmup_requests + n_requests
+        )]
+        mode_params = {
+            "retrieval_only": {"rerank": "false"},
+            "retrieval_plus_rerank": {"rerank": "true", "n": str(stage1_n)},
+        }
+        modes: dict[str, Any] = {}
+        for mode_name in LATENCY_MODES:
+            latencies, n_errors, wall_seconds = asyncio.run(
+                _collect_latencies(
+                    base_url,
+                    user_ids,
+                    k=k,
+                    concurrency=concurrency,
+                    warmup=warmup_requests,
+                    extra_params=mode_params[mode_name],
+                )
             )
-        )
-        if n_errors:
-            raise LoadTestError(
-                f"{n_errors} recommend requests failed; refusing to write latency results"
+            modes[mode_name] = _mode_record(
+                rerank_enabled=mode_name == "retrieval_plus_rerank",
+                stage1_n=stage1_n,
+                latencies=latencies,
+                n_errors=n_errors,
+                wall_seconds=wall_seconds,
+                n_requests=n_requests,
             )
-        if len(latencies) != n_requests:
-            raise LoadTestError(
-                f"expected {n_requests} latency samples, got {len(latencies)}"
-            )
-        latency_ms = latency_percentiles_ms(latencies)
-        throughput = float(n_requests) / float(wall_seconds) if wall_seconds > 0 else 0.0
+        retrieval = modes["retrieval_only"]
         workload = {
             "k": int(k),
+            "stage1_n": int(stage1_n),
             "n_requests": int(n_requests),
             "warmup_requests": int(warmup_requests),
             "concurrency": int(concurrency),
@@ -501,15 +622,17 @@ def run_http_load_test(
             "percentile_method": PERCENTILE_METHOD,
             "server": "uvicorn",
             "client": "httpx.AsyncClient",
+            "modes": list(LATENCY_MODES),
         }
         payload = build_latency_payload(
             catalog=catalog,
             workload=workload,
-            latency_ms=latency_ms,
-            throughput_requests_per_s=throughput,
-            wall_seconds=wall_seconds,
+            latency_ms=retrieval["latency_ms"],
+            throughput_requests_per_s=retrieval["throughput_requests_per_s"],
+            wall_seconds=retrieval["wall_seconds"],
             n_requests=n_requests,
-            n_errors=n_errors,
+            n_errors=retrieval["n_errors"],
+            modes=modes,
             root=root,
         )
         write_latency_results(payload, json_out, md_out)
@@ -525,18 +648,26 @@ def run_http_load_test(
                 proc.wait(timeout=5)
         if temp_dir is not None:
             temp_dir.cleanup()
+        if rerank_temp is not None:
+            rerank_temp.cleanup()
         stderr_path.unlink(missing_ok=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Load-test GET /recommend and write results/serving_latency.json "
-            "and .md. Default catalog is synthetic (MovieLens 100K cardinality, "
-            "seeded noise). Does not download MovieLens."
+            "Load-test GET /recommend with and without re-ranking and write "
+            "results/serving_latency.json and .md. Default catalog and "
+            "re-ranker are synthetic. Does not download MovieLens."
         )
     )
     parser.add_argument("--artifact", type=Path, default=None)
+    parser.add_argument(
+        "--rerank",
+        type=Path,
+        default=None,
+        help="Optional re-rank artifact. Default is a synthetic MLP matched to the catalog.",
+    )
     parser.add_argument("--num-users", type=int, default=DEFAULT_NUM_USERS)
     parser.add_argument("--num-items", type=int, default=DEFAULT_NUM_ITEMS)
     parser.add_argument("--embedding-dim", type=int, default=DEFAULT_EMBEDDING_DIM)
@@ -546,6 +677,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP)
     parser.add_argument("--concurrency", type=int, default=DEFAULT_CONCURRENCY)
     parser.add_argument("--k", type=int, default=DEFAULT_K)
+    parser.add_argument("--stage1-n", type=int, default=DEFAULT_STAGE1_N)
     parser.add_argument(
         "--json-out",
         type=Path,
@@ -571,6 +703,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         payload = run_http_load_test(
             artifact_path=args.artifact,
+            rerank_path=args.rerank,
             num_users=args.num_users,
             num_items=args.num_items,
             embedding_dim=args.embedding_dim,
@@ -580,20 +713,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             warmup_requests=args.warmup,
             concurrency=args.concurrency,
             k=args.k,
+            stage1_n=args.stage1_n,
             json_out=args.json_out,
             md_out=args.md_out,
         )
-    except (LoadTestError, serving.ServingError, OSError) as exc:
+    except (LoadTestError, serving.ServingError, rerank.RerankError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    latency = payload["latency_ms"]
+    retrieval = payload["modes"]["retrieval_only"]["latency_ms"]
+    reranked = payload["modes"]["retrieval_plus_rerank"]["latency_ms"]
     print(
-        "p50_ms={p50:.6f} p95_ms={p95:.6f} p99_ms={p99:.6f} "
-        "throughput_rps={rps:.6f} cpu={cpu}".format(
-            p50=latency["p50"],
-            p95=latency["p95"],
-            p99=latency["p99"],
-            rps=payload["throughput_requests_per_s"],
+        "retrieval p50_ms={p50:.6f} p95_ms={p95:.6f} p99_ms={p99:.6f} "
+        "rerank p50_ms={r50:.6f} p95_ms={r95:.6f} p99_ms={r99:.6f} cpu={cpu}".format(
+            p50=retrieval["p50"],
+            p95=retrieval["p95"],
+            p99=retrieval["p99"],
+            r50=reranked["p50"],
+            r95=reranked["p95"],
+            r99=reranked["p99"],
             cpu=payload["cpu"]["model"],
         )
     )

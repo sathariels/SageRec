@@ -143,13 +143,17 @@ def test_healthz_and_recommend_contract(tmp_path: Path) -> None:
     assert body["num_items"] == 4
     assert body["embedding_dim"] == 2
     assert body["schema"] == serving.SERVING_SCHEMA
+    assert body["rerank_loaded"] is False
 
     recommend = client.get("/recommend", params={"user_id": 0, "k": 2})
     assert recommend.status_code == 200
     payload = recommend.json()
     assert payload["user_id"] == 0
     assert payload["k"] == 2
+    assert payload["rerank"] is False
+    assert "stage1_n" not in payload
     assert [row["item_id"] for row in payload["recommendations"]] == [0, 1]
+    assert "retrieval_score" not in payload["recommendations"][0]
     assert [row["title"] for row in payload["recommendations"]] == ["Alpha", "Beta"]
     assert payload["recommendations"][0]["score"] == 1.0
     assert payload["recommendations"][1]["score"] == 1.0
@@ -196,7 +200,8 @@ def test_http_surface_is_healthz_and_recommend(tmp_path: Path) -> None:
 def test_api_source_does_not_sample_or_download() -> None:
     api_source = (_PYTHON_DIR / "sagerec_api.py").read_text(encoding="utf-8")
     serving_source = (_PYTHON_DIR / "sagerec_serving.py").read_text(encoding="utf-8")
-    for source in (api_source, serving_source):
+    rerank_source = (_PYTHON_DIR / "sagerec_rerank.py").read_text(encoding="utf-8")
+    for source in (api_source, serving_source, rerank_source):
         assert "NeighborLoader" not in source
         assert "ClusterLoader" not in source
         assert "torch_geometric" not in source
@@ -205,6 +210,8 @@ def test_api_source_does_not_sample_or_download() -> None:
         assert "import torch" not in source
         assert "import graph_sampler" not in source
     assert "recommend_topk" in api_source
+    assert "order_candidates" in api_source
+    assert "SAGEREC_RERANK_ARTIFACT" in api_source
     assert "numpy" in serving_source
     assert "FAISS is not required" in serving_source
 
@@ -417,7 +424,8 @@ def test_committed_serving_latency_matches_markdown() -> None:
     for key in loadtest.REQUIRED_LATENCY_KEYS:
         assert key in payload
     assert payload["protocol_version"] == loadtest.PROTOCOL_VERSION
-    assert payload["adr"] == "ADR-009"
+    assert payload["adr"] == "ADR-010"
+    assert payload["retrieval_adr"] == "ADR-009"
     assert payload["endpoint"] == "GET /recommend"
     assert payload["n_errors"] == 0
     assert payload["n_requests"] == loadtest.DEFAULT_REQUESTS
@@ -428,10 +436,35 @@ def test_committed_serving_latency_matches_markdown() -> None:
     assert payload["workload"]["concurrency"] == loadtest.DEFAULT_CONCURRENCY
     assert payload["workload"]["warmup_requests"] == loadtest.DEFAULT_WARMUP
     assert payload["workload"]["k"] == loadtest.DEFAULT_K
+    assert payload["workload"]["stage1_n"] == loadtest.DEFAULT_STAGE1_N
     latency = payload["latency_ms"]
     assert latency["percentile_method"] == "linear"
     assert latency["min"] <= latency["p50"] <= latency["p95"] <= latency["p99"] <= latency["max"]
     assert payload["throughput_requests_per_s"] > 0
+    assert payload["catalog"]["rerank_kind"] == "synthetic"
+    modes = payload["modes"]
+    assert list(modes) == list(loadtest.LATENCY_MODES)
+    retrieval = modes["retrieval_only"]
+    reranked = modes["retrieval_plus_rerank"]
+    assert retrieval["rerank"] is False
+    assert reranked["rerank"] is True
+    assert reranked["stage1_n"] == loadtest.DEFAULT_STAGE1_N
+    assert retrieval["n_errors"] == 0
+    assert reranked["n_errors"] == 0
+    assert retrieval["n_requests"] == loadtest.DEFAULT_REQUESTS
+    assert reranked["n_requests"] == loadtest.DEFAULT_REQUESTS
+    for mode in (retrieval, reranked):
+        mode_latency = mode["latency_ms"]
+        assert mode_latency["percentile_method"] == "linear"
+        assert (
+            mode_latency["min"]
+            <= mode_latency["p50"]
+            <= mode_latency["p95"]
+            <= mode_latency["p99"]
+            <= mode_latency["max"]
+        )
+        assert mode["throughput_requests_per_s"] > 0
+    assert retrieval["latency_ms"] == payload["latency_ms"]
     assert isinstance(payload["cpu"]["model"], str) and payload["cpu"]["model"]
     assert isinstance(payload["cpu"]["logical_cpus"], int)
     assert payload["platform"]["system"]
@@ -441,4 +474,114 @@ def test_committed_serving_latency_matches_markdown() -> None:
     rendered = loadtest.render_serving_latency_markdown(payload)
     assert _LATENCY_MD.read_text(encoding="utf-8") == rendered
     assert "p50" in rendered
+    assert "retrieval_only" in rendered
+    assert "retrieval_plus_rerank" in rendered
     assert payload["cpu"]["model"] in rendered
+
+
+def _popularity_bundle():
+    import sagerec_rerank as rerank
+
+    tables = rerank.FeatureTables(
+        item_popularity=np.asarray([0.0, 0.0, 10.0, 0.0], dtype=np.float64),
+        item_recency=np.zeros(4, dtype=np.float64),
+        item_genres=np.zeros((4, 1), dtype=np.float64),
+        user_genre_profile=np.zeros((2, 1), dtype=np.float64),
+        genres_available=False,
+    )
+    return rerank.zero_linear_bundle(
+        tables,
+        stage1_model="fixture",
+        popularity_weight=1.0,
+    )
+
+
+def _client_with_rerank(tmp_path: Path):
+    from fastapi.testclient import TestClient
+
+    import sagerec_api
+    import sagerec_rerank as rerank
+
+    artifact = tmp_path / "embeddings.npz"
+    rerank_path = tmp_path / "rerank.npz"
+    serving.save_serving_artifact(artifact, _fixture_index())
+    rerank.save_rerank_artifact(rerank_path, _popularity_bundle())
+    return TestClient(sagerec_api.create_app(artifact, rerank_path))
+
+
+def test_rerank_false_keeps_retrieval_order_when_a_model_is_loaded(tmp_path: Path) -> None:
+    client = _client_with_rerank(tmp_path)
+    health = client.get("/healthz")
+    assert health.status_code == 200
+    assert health.json()["rerank_loaded"] is True
+    response = client.get("/recommend", params={"user_id": 0, "k": 2, "rerank": "false"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rerank"] is False
+    assert [row["item_id"] for row in body["recommendations"]] == [0, 1]
+    assert "retrieval_score" not in body["recommendations"][0]
+    ignored_n = client.get(
+        "/recommend",
+        params={"user_id": 0, "k": 2, "rerank": "false", "n": 1},
+    )
+    assert ignored_n.status_code == 200
+    assert [row["item_id"] for row in ignored_n.json()["recommendations"]] == [0, 1]
+
+
+def test_rerank_true_reorders_the_stage1_pool_and_keeps_seen_items_out(tmp_path: Path) -> None:
+    client = _client_with_rerank(tmp_path)
+    response = client.get("/recommend", params={"user_id": 0, "k": 2, "rerank": "true", "n": 3})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rerank"] is True
+    assert body["stage1_n"] == 3
+    rows = body["recommendations"]
+    assert [row["item_id"] for row in rows] == [2, 0]
+    assert rows[0]["score"] == 10.0
+    assert rows[0]["retrieval_score"] == 0.5
+    assert rows[1]["retrieval_score"] == 1.0
+    assert all(row["item_id"] != 3 for row in rows)
+
+    narrow = client.get("/recommend", params={"user_id": 0, "k": 2, "rerank": "true", "n": 2})
+    assert narrow.status_code == 200
+    assert [row["item_id"] for row in narrow.json()["recommendations"]] == [0, 1]
+
+
+def test_rerank_true_without_a_model_is_422_and_unknown_user_stays_404(tmp_path: Path) -> None:
+    client = _client_for(_fixture_index(), tmp_path)
+    missing = client.get("/recommend", params={"user_id": 0, "k": 1, "rerank": "true"})
+    assert missing.status_code == 422
+    detail = missing.json()["detail"]
+    assert isinstance(detail, str)
+    assert "sagerec_rerank_artifact" in detail
+    assert "SAGEREC_RERANK_ARTIFACT" in detail
+
+    loaded = _client_with_rerank(tmp_path)
+    unknown = loaded.get("/recommend", params={"user_id": 99, "k": 1, "rerank": "true"})
+    assert unknown.status_code == 404
+    assert "unknown user_id 99" in unknown.json()["detail"]
+    too_small = loaded.get("/recommend", params={"user_id": 0, "k": 2, "rerank": "true", "n": 1})
+    assert too_small.status_code == 422
+    assert "n must be >= k" in too_small.json()["detail"]
+    bad_flag = loaded.get("/recommend", params={"user_id": 0, "k": 1, "rerank": "maybe"})
+    assert bad_flag.status_code == 422
+
+
+def test_mismatched_rerank_artifact_fails_at_startup(tmp_path: Path) -> None:
+    import sagerec_api
+    import sagerec_rerank as rerank
+
+    artifact = tmp_path / "embeddings.npz"
+    rerank_path = tmp_path / "rerank.npz"
+    serving.save_serving_artifact(artifact, _fixture_index())
+    bundle = _popularity_bundle()
+    bundle.metadata["stage1_model"] = "other_model"
+    rerank.save_rerank_artifact(rerank_path, bundle)
+    try:
+        sagerec_api.create_app(artifact, rerank_path)
+    except rerank.RerankError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected RerankError")
+    assert "other_model" in message
+    assert "fixture" in message

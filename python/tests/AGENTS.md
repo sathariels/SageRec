@@ -63,4 +63,13 @@ directory on `sys.path` so `PYTHONPATH=build` still works). Prefer
   `sample_neighbors`. Keep the module import-safe for unittest
   discovery. Do not download MovieLens, bind a public port, or
   rewrite `results/serving_latency.*` from the test.
+- Cover Phase 10 in `test_rerank.py` (unittest discovery): MAP@10,
+  train-only popularity/recency/genre affinity, `u.item` parsing, MLP
+  learning and determinism, artifact order and tie-break, and a tiny
+  synthetic two-stage eval. `test_serving_api.py` covers optional
+  `rerank` / `n` on `/recommend` (order preserved when the flag is off,
+  422 without an artifact or when `n < k`, 404 for an unknown user).
+  Do not download MovieLens or run `scripts/run_rerank_eval.py` in
+  default CI. The committed-file test reads `results/rerank_eval.json`;
+  it does not regenerate it.
 - Keep type hints on test helpers that form part of a public-looking fixture.

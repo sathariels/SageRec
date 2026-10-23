@@ -64,8 +64,11 @@ support. Do not add MovieLens 1M code, downloads, or file-path helpers.
   and Phase 8 demo-CLI tests (missing/corrupt checkpoints, synthetic
   top-K; no MovieLens download).
   CTest `python_serving_api` runs pytest on
-  `python/tests/test_serving_api.py` (ADR-009 FastAPI TestClient,
-  synthetic artifact; no MovieLens download and no public port).
+  `python/tests/test_serving_api.py` (ADR-009 FastAPI TestClient plus
+  the ADR-010 `rerank` flag, synthetic artifact; no MovieLens download
+  and no public port). Unittest discovery also runs
+  `python/tests/test_rerank.py` (synthetic features and MLP; no
+  MovieLens download).
   PYTHONPATH includes the build directory and `python/` so `sagerec_*`
   modules import cleanly.
 

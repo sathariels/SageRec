@@ -46,6 +46,31 @@ def recall_at_k(
     return hits / float(len(relevant))
 
 
+def average_precision_at_k(
+    ranked_items: Sequence[int],
+    relevant: Set[int],
+    k: int = DEFAULT_K,
+) -> float:
+    """Binary AP@k. One relevant item yields ``1/rank`` when ``rank <= k``, else 0.
+
+    The denominator is ``min(k, |relevant|)``. Macro-averaging this value is
+    MAP@k. Rank is 1-based within ``ranked_items``.
+    """
+    k = _require_k(k)
+    if not relevant:
+        raise ValueError("relevant is empty; average precision is undefined")
+    hits = 0
+    precision_sum = 0.0
+    for rank, item in enumerate(ranked_items[:k], start=1):
+        if item in relevant:
+            hits += 1
+            precision_sum += hits / float(rank)
+    denom = float(min(k, len(relevant)))
+    if denom == 0.0:
+        return 0.0
+    return precision_sum / denom
+
+
 def ndcg_at_k(
     ranked_items: Sequence[int],
     relevant: Set[int],
