@@ -24,7 +24,12 @@ dependency versions, hardware/device, timestamp, and protocol version.
 - Keep checkpoints and bulky per-run logs in ignored subdirectories
   (`results/checkpoints/`). Phase 8 demo-CLI tests write temp-dir
   checkpoints only; do not commit weights or retcon 100K quality JSON.
-- Phase 9 serving latency (`serving_latency.json` / `.md`) is written
-  by `sagerec_loadtest` from a real HTTP run. Do not hand-edit those
+- Phase 9/10 serving latency (`serving_latency.json` / `.md`) is written
+  by `sagerec_loadtest` from a real HTTP run (both modes under
+  `serving-latency-v2`). Do not hand-edit those
   numbers. They are one-machine request latency, not ranking quality.
   Serving `.npz` artifacts stay under ignored `results/serving/`.
+- Phase 10 re-rank quality (`rerank_eval.json` / `.md`) is written by
+  `sagerec_rerank_eval` from a real MovieLens 100K run. Do not
+  hand-edit those numbers. They are single-seed implicit-MF retrieval
+  plus a NumPy MLP, not GraphSAGE and not the ADR-007 leaderboard.

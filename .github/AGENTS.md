@@ -32,3 +32,8 @@ GitHub Actions here must verify the native foundation without side effects.
   MovieLens, do not regenerate `results/serving_latency.*` in CI, and
   do not bind a public port. The load-test script is a measured local
   run, not a CI job.
+  Phase 10 re-rank tests (`python/tests/test_rerank.py`, picked up by
+  unittest discovery) use synthetic graphs and must not download
+  MovieLens, run `scripts/run_rerank_eval.py`, or regenerate
+  `results/rerank_eval.*` or `results/serving_latency.*`. Do not add
+  LightGBM to the CI image.

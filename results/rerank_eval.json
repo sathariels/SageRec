@@ -1,0 +1,149 @@
+{
+  "benchmark": "sagerec_two_stage_rerank",
+  "protocol_version": "rerank-eval-v1",
+  "adr": "ADR-010",
+  "dataset_edition": "100k",
+  "source_url": "https://files.grouplens.org/datasets/movielens/ml-100k.zip",
+  "checksum": "md5:0e33842e24a9c977be4e0107933c0723",
+  "license": "GroupLens MovieLens research license; see ml-100k-README.txt in the archive",
+  "split_policy_id": "per_user_chronological_leave_one_out",
+  "split_policy_version": "adr-003-v1",
+  "seed": 7,
+  "stage1": {
+    "model": "implicit_mf",
+    "score_formula": "dot(user_embedding, item_embedding) + user_bias + item_bias",
+    "tie_break": "score descending, then movie_id ascending",
+    "hyperparams": {
+      "n_factors": 16,
+      "n_epochs": 1,
+      "learning_rate": 0.05,
+      "n_negatives": 2,
+      "l2": 0.01,
+      "init_std": 0.1
+    },
+    "stage1_n": 200,
+    "candidate_filter": "test eval excludes train and validation positives; the test positive stays in the pool"
+  },
+  "stage2": {
+    "model": "numpy_mlp_listwise",
+    "score_formula": "relu(features @ w1 + b1) @ w2 + b2 + features @ w_linear; features are standardized with the training mean and std",
+    "tie_break": "score descending, then movie_id ascending",
+    "hyperparams": {
+      "stage1_n": 200,
+      "hidden_dim": 8,
+      "n_epochs": 30,
+      "learning_rate": 0.05,
+      "l2": 0.0001,
+      "seed": 7,
+      "k": 10,
+      "init_std": 0.1
+    },
+    "feature_names": [
+      "retrieval_score",
+      "item_popularity",
+      "genre_affinity",
+      "item_recency"
+    ],
+    "genres_available": true,
+    "genre_names": [
+      "unknown",
+      "Action",
+      "Adventure",
+      "Animation",
+      "Children's",
+      "Comedy",
+      "Crime",
+      "Documentary",
+      "Drama",
+      "Fantasy",
+      "Film-Noir",
+      "Horror",
+      "Musical",
+      "Mystery",
+      "Romance",
+      "Sci-Fi",
+      "Thriller",
+      "War",
+      "Western"
+    ],
+    "uitem_origin": "data/raw/ml-100k.zip#ml-100k/u.item",
+    "label_split": "validation",
+    "eval_split": "test",
+    "training_pool_excludes": [
+      "train",
+      "test"
+    ]
+  },
+  "protocol": {
+    "k": 10,
+    "stage1_n": 200,
+    "metrics": [
+      "recall_at_10",
+      "ndcg_at_10",
+      "map"
+    ],
+    "map": "MAP@10. One relevant item per eligible user. AP@10 is 1/rank when the held-out item's 1-based rank is <= 10, else 0. MAP is the unweighted mean over eligible users. Both systems rank inside the same stage-1 top-N pool, so retrieval-only top-10 matches full-catalog top-10 when N >= 10 and the tie-break matches.",
+    "eligible_users": "ADR-003 users with at least 3 interactions",
+    "same_pool": true
+  },
+  "n_users": 943,
+  "stage1_hit_rate_at_n": 0.35737009544008486,
+  "retrieval_only": {
+    "recall_at_10": 0.03817603393425239,
+    "ndcg_at_10": 0.020303175177886473,
+    "map": 0.01495017589927452
+  },
+  "retrieval_plus_rerank": {
+    "recall_at_10": 0.053022269353128315,
+    "ndcg_at_10": 0.026510184267505867,
+    "map": 0.018499722264303388
+  },
+  "delta_retrieval_plus_rerank_minus_retrieval_only": {
+    "recall_at_10": 0.014846235418875926,
+    "ndcg_at_10": 0.006207009089619395,
+    "map": 0.003549546365028867
+  },
+  "rerank_train": {
+    "n_eligible_users": 943,
+    "n_train_users": 442,
+    "validation_hit_rate_at_n": 0.4687168610816543,
+    "loss_first_epoch": 5.18127992724679,
+    "loss_final_epoch": 5.172139239139217,
+    "n_epochs": 30,
+    "label_split": "validation",
+    "excluded_from_training_pools": [
+      "train",
+      "test"
+    ]
+  },
+  "eligibility": {
+    "users": 943,
+    "movies": 1682,
+    "interactions": {
+      "total": 100000,
+      "train": 98114,
+      "validation": 943,
+      "test": 943
+    },
+    "eligible_users": 943,
+    "cold_start_users": 0,
+    "evaluated_users": 943
+  },
+  "cpu": {
+    "model": "Intel(R) Xeon(R) Processor",
+    "logical_cpus": 4,
+    "machine": "x86_64"
+  },
+  "platform": {
+    "system": "Linux",
+    "release": "6.12.94+",
+    "machine": "x86_64",
+    "processor": "x86_64"
+  },
+  "python": "3.12.3",
+  "numpy": "1.26.4",
+  "git_commit": "03c7891040c9972abb6621845f9803544642ef5a",
+  "git_dirty": true,
+  "generated_at": "2026-10-23T23:31:31.336612+00:00",
+  "note": "Single-seed MovieLens 100K two-stage comparison (ADR-010). Stage 1 is implicit MF (ADR-004) dot-product retrieval, the same score ADR-009 serves, trained on ADR-003 train positives only. Stage 2 is a NumPy MLP with a linear skip, fit listwise on validation items that stage 1 retrieved, and scored on the test split. Both systems rank inside that stage-1 top-N pool. MAP is MAP@10. Features use train interactions only. Genres come from u.item. This is not a GraphSAGE result, not the Phase 5 or Phase 7 leaderboard, and not a SOTA claim. Re-ranking cannot recover a test item that stage 1 did not retrieve. git_dirty was true at generation, so git_commit is the HEAD the process saw and may not contain this results file."
+}

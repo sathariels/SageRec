@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Thin CLI: measure GET /recommend latency and write results/ (ADR-009)."""
+"""Thin CLI: measure GET /recommend latency and write results/ (ADR-010).
+
+Records retrieval-only and retrieval-plus-re-rank (protocol serving-latency-v2).
+"""
 
 from __future__ import annotations
 

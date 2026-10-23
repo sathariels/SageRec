@@ -1,7 +1,8 @@
 {
   "benchmark": "sagerec_http_recommend",
-  "protocol_version": "serving-latency-v1",
-  "adr": "ADR-009",
+  "protocol_version": "serving-latency-v2",
+  "adr": "ADR-010",
+  "retrieval_adr": "ADR-009",
   "endpoint": "GET /recommend",
   "catalog": {
     "kind": "synthetic",
@@ -10,31 +11,72 @@
     "embedding_dim": 16,
     "seen_per_user": 20,
     "seed": 7,
-    "model": "synthetic"
+    "model": "synthetic",
+    "rerank_kind": "synthetic"
   },
   "workload": {
     "k": 10,
+    "stage1_n": 200,
     "n_requests": 1000,
     "warmup_requests": 100,
     "concurrency": 16,
     "request_seed": 7,
     "percentile_method": "linear",
     "server": "uvicorn",
-    "client": "httpx.AsyncClient"
+    "client": "httpx.AsyncClient",
+    "modes": [
+      "retrieval_only",
+      "retrieval_plus_rerank"
+    ]
   },
   "latency_ms": {
-    "p50": 19.909990499968444,
-    "p95": 59.1005087500548,
-    "p99": 85.91370133994928,
-    "mean": 24.707682000997465,
-    "min": 6.654086000025927,
-    "max": 127.66264699996555,
+    "p50": 23.443566500077395,
+    "p95": 66.87042594986677,
+    "p99": 93.59026779989787,
+    "mean": 28.48181201199827,
+    "min": 7.338863000086349,
+    "max": 133.45369600006052,
     "percentile_method": "linear"
   },
-  "throughput_requests_per_s": 617.9517943900427,
-  "wall_seconds": 1.6182492049999837,
+  "throughput_requests_per_s": 534.0127735919701,
+  "wall_seconds": 1.872614381999938,
   "n_requests": 1000,
   "n_errors": 0,
+  "modes": {
+    "retrieval_only": {
+      "rerank": false,
+      "latency_ms": {
+        "p50": 23.443566500077395,
+        "p95": 66.87042594986677,
+        "p99": 93.59026779989787,
+        "mean": 28.48181201199827,
+        "min": 7.338863000086349,
+        "max": 133.45369600006052,
+        "percentile_method": "linear"
+      },
+      "throughput_requests_per_s": 534.0127735919701,
+      "wall_seconds": 1.872614381999938,
+      "n_requests": 1000,
+      "n_errors": 0
+    },
+    "retrieval_plus_rerank": {
+      "rerank": true,
+      "latency_ms": {
+        "p50": 21.012949500004652,
+        "p95": 66.63823284982296,
+        "p99": 94.78142839999234,
+        "mean": 27.05330871199658,
+        "min": 8.055002999981298,
+        "max": 230.55966900005842,
+        "percentile_method": "linear"
+      },
+      "throughput_requests_per_s": 568.753940373489,
+      "wall_seconds": 1.7582295770000655,
+      "n_requests": 1000,
+      "n_errors": 0,
+      "stage1_n": 200
+    }
+  },
   "cpu": {
     "model": "Intel(R) Xeon(R) Processor",
     "logical_cpus": 4,
@@ -53,8 +95,8 @@
     "uvicorn": "0.54.0",
     "httpx": "0.28.1"
   },
-  "git_commit": "70a565104f0aa00cfe85923487d3a5813f13fefb",
+  "git_commit": "03c7891040c9972abb6621845f9803544642ef5a",
   "git_dirty": true,
-  "generated_at": "2026-10-21T21:00:46.825913+00:00",
-  "note": "One-machine ADR-009 HTTP latency for GET /recommend on a local uvicorn process. Top-K is exact NumPy over precomputed embeddings. Not a ranking-quality result, not sampler timing, and not a production SLO. The catalog is seeded synthetic noise with MovieLens 100K user/item counts; no ratings were read. git_dirty was true at generation, so git_commit is the HEAD the process saw and may not contain this results file."
+  "generated_at": "2026-10-23T23:29:04.698787+00:00",
+  "note": "One-machine HTTP latency for GET /recommend on a local uvicorn process, measured twice: retrieval-only (ADR-009 NumPy top-K) and retrieval plus re-rank (ADR-010 MLP over the stage-1 pool). Top-level latency_ms duplicates retrieval_only. Not a ranking-quality result, not sampler timing, and not a production SLO. The catalog is seeded synthetic noise with MovieLens 100K user/item counts; no ratings were read. The re-ranker is a seeded synthetic MLP over synthetic popularity, genre, and recency tables, not the MovieLens-trained model. git_dirty was true at generation, so git_commit is the HEAD the process saw and may not contain this results file."
 }

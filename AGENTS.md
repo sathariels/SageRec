@@ -14,7 +14,8 @@ Phase 1 native foundation is verified. ADR-001 (MovieLens 100K), ADR-002
 (matrix factorization), ADR-005 (uniform sampling without replacement),
 ADR-006 (PyG SAGEConv on native `graph_sampler` neighborhoods),
 ADR-007 (multi-seed MF vs GraphSAGE leaderboard), ADR-008 (demo CLI
-serving), and ADR-009 (HTTP serving on precomputed embeddings) are
+serving), ADR-009 (HTTP serving on precomputed embeddings), and
+ADR-010 (two-stage retrieval and re-ranking) are
 accepted; MovieLens 1M is deferred. The verified slice includes the C++ CSR graph, seeded
 neighbor sampler, MovieLens 100K `u.data` parser, `graph_sampler`
 bindings, a naive Python reference sampler with native parity tests,
@@ -23,7 +24,7 @@ ADR-003 leave-one-out prep, MovieLens 100K download and on-disk
 a native-backed mini-batch neighborhood helper, GraphSAGE training on
 that harness (PyG `SAGEConv`, native neighborhoods), and CI.
 
-The current verified tip is Phase 9 / ADR-009. Phase 2 is delivered for
+The current verified tip is Phase 10 / ADR-010. Phase 2 is delivered for
 MovieLens 100K: download + on-disk `processed/` prep, and timing charts
 (native `graph_sampler` versus the Python reference sampler, with stored
 JSON/SVG under `results/`; synthetic graph by default; optional
@@ -43,9 +44,16 @@ PairScorer-compatible checkpoint, score candidate movie IDs, print top-K
 (`python/sagerec_serve.py`, `scripts/demo_recommend.py`). Phase 9 is
 delivered for the ADR-009 HTTP API: offline embedding export, FastAPI
 `GET /recommend` and `/healthz` over a NumPy top-K index, and measured
-latency under `results/serving_latency.*`. Tiny synthetic
+latency under `results/serving_latency.*`. Phase 10 is delivered for
+ADR-010 two-stage retrieval and re-ranking: stage 1 is the existing
+embedding top-N, stage 2 is a small NumPy MLP (retrieval score, train-only
+popularity, genre affinity, and recency) trained on the ADR-003 validation
+labels inside that pool. Offline comparison is
+`results/rerank_eval.json`. `GET /recommend` accepts optional `rerank`
+(default false) and the load test records p50/p95/p99 for both modes
+(`serving-latency-v2`). Tiny synthetic
 GraphSAGE metrics remain protocol smoke and must stay separate from the
-stored 100K numbers. Do not add MovieLens 1M, GCN, or batch-export
+stored 100K numbers. Do not add MovieLens 1M, GCN, LightGBM, or batch-export
 paths. Do not invent metrics or hand-edit timings.
 
 ## Read order
@@ -82,6 +90,10 @@ Accepted and recorded in `docs/decisions.md`:
 - ADR-009: HTTP serving on precomputed embeddings (FastAPI
   `GET /recommend` and `/healthz`). NumPy exact top-K. Not batch export.
   FAISS is not required.
+- ADR-010: Two-stage retrieval and re-ranking. Stage 1 is ADR-009 top-N
+  (default 200). Stage 2 is a NumPy MLP on train-only features, optional
+  on `GET /recommend` (`rerank=false` by default). Not LightGBM, not
+  per-request sampling or training, and not batch export.
 
 Do not add node2vec unless a superseding ADR accepts it.
 

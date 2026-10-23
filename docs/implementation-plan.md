@@ -4,8 +4,9 @@ ADR-001 (MovieLens 100K), ADR-002 (GraphSAGE), ADR-003 (per-user
 chronological leave-one-out), ADR-004 (matrix factorization), ADR-005
 (uniform sampling without replacement), ADR-006 (PyG SAGEConv on
 native neighborhoods), ADR-007 (5-seed MF vs GraphSAGE leaderboard),
-ADR-008 (demo CLI serving), and ADR-009 (HTTP serving on precomputed
-embeddings) are accepted. MovieLens 1M remains
+ADR-008 (demo CLI serving), ADR-009 (HTTP serving on precomputed
+embeddings), and ADR-010 (two-stage retrieval and re-ranking) are
+accepted. MovieLens 1M remains
 deferred. Phase 2 is delivered/complete for MovieLens 100K: download
 and on-disk `processed/` prep, and timing charts (native vs Python
 reference sampler, stored JSON/SVG). Phase 4 GraphSAGE training on the
@@ -20,6 +21,10 @@ scoring, top-K print) with synthetic harness tests. Phase 9 is delivered
 for the ADR-009 HTTP API: offline embedding export, FastAPI
 `GET /recommend` and `/healthz`, NumPy top-K, pytest `TestClient`
 coverage, and a measured `results/serving_latency.*` load test.
+Phase 10 is delivered for ADR-010: a NumPy MLP re-ranker on the stage-1
+top-N pool, MovieLens 100K retrieval-only versus retrieval-plus-re-rank
+under `results/rerank_eval.json`, optional `rerank` on `GET /recommend`,
+and load-test p50/p95/p99 for both modes (`serving-latency-v2`).
 
 ## Phase 1: Native foundation
 
@@ -308,8 +313,9 @@ scope. The demo CLI stays.
   `python_serving_api`. Default CI does not download MovieLens, does
   not regenerate the latency file, and does not bind a public port.
 
-Still not started:
+Still not started in the Phase 9 slice (moved or still rejected):
 
+- Optional re-ranking of the same embeddings (Phase 10 / ADR-010).
 - Batch export.
 - MovieLens 1M, GCN, node2vec, NeighborLoader.
 - FAISS as a required index.
@@ -318,4 +324,50 @@ Exit condition: ADR-009 recorded, export and API tests on the default
 CI path, measured latency files committed from a real run, and docs
 match the artifact and HTTP contract. Do not invent or edit stored
 100K quality result files.
+
+## Phase 10: Two-stage retrieval and re-ranking
+
+Opened in the ADR-010 slice. Stage 1 stays the ADR-009 embedding
+retriever. Stage 2 is optional.
+
+- `python/sagerec_rerank.py` builds train-only features (retrieval
+  score, `log1p` popularity, genre affinity from `u.item`, item
+  recency), trains a NumPy MLP with one ReLU hidden layer and a linear
+  skip by listwise softmax, and orders the stage-1 pool. It does not
+  import PyTorch, PyG, LightGBM, or `graph_sampler`.
+- `python/sagerec_rerank_eval.py` and `scripts/run_rerank_eval.py` fit
+  implicit MF (`movielens_100k_config`, seed 7) as stage 1, fit the MLP
+  on validation items retrieved inside top-N (default 200), and compare
+  both systems on the test split of that same pool. Metrics are
+  Recall@10, NDCG@10, and MAP@10. Output is `results/rerank_eval.json`
+  and `.md`. This is a single-seed MF retrieval measurement. It does
+  not replace Phase 5 or the ADR-007 leaderboard and it is not a
+  GraphSAGE result. Training pools exclude the test item; test pools
+  exclude the validation item. The re-ranker cannot recover items
+  outside top-N.
+- `GET /recommend` accepts `rerank` (default false) and `n` (stage-1
+  width). `rerank=true` needs `SAGEREC_RERANK_ARTIFACT` whose
+  user/item counts and `stage1_model` match the serving artifact.
+  Unknown users stay 404. Missing artifact or `n < k` is 422. The
+  request does not train or sample.
+- The load test writes protocol `serving-latency-v2` with p50/p95/p99
+  and throughput for `retrieval_only` and `retrieval_plus_rerank`.
+  Top-level `latency_ms` duplicates retrieval-only. The committed
+  catalog and the timed MLP are synthetic. Do not hand-edit them.
+- Tests: `python/tests/test_rerank.py` (unittest discovery) for MAP,
+  feature leakage, the MLP, and artifact order; API tests in
+  `python/tests/test_serving_api.py` for the flag, `n`, and startup
+  mismatch. Default CI does not download MovieLens, does not run the
+  100K re-rank job, and does not regenerate `results/serving_latency.*`.
+
+Still rejected:
+
+- LightGBM (or any extra native library) on the request path.
+- Batch export, MovieLens 1M, GCN, node2vec, NeighborLoader, FAISS.
+
+Exit condition: ADR-010 recorded, feature/MLP/API tests on the default
+CI path, measured `results/rerank_eval.*` and regenerated
+`results/serving_latency.*` committed from real runs, and docs match
+the two-stage contract. Do not invent metrics or retcon Phase 5 or
+Phase 7 files.
 

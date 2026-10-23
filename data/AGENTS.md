@@ -13,7 +13,9 @@ data and generated processed artifacts are not committed.
 - Native 100K parsing is `sagerec::parse_movielens_100k` on in-memory `u.data`
   text. Split assignment stays in `python/sagerec_prep.py` (ADR-003). Phase 2
   download is `python/sagerec_download.py`; on-disk prep is
-  `python/sagerec_dataset.py`. Do not add MovieLens 1M.
+  `python/sagerec_dataset.py`. ADR-010 genre features read `u.item`
+  from `raw/` (extracted from the official zip; not committed). Do not
+  add MovieLens 1M.
 - The manifest schema is `processed/manifest.schema.json`. On-disk prep fills
   edition, split policy, eligibility/cold-start defaults, counts, source URL,
   checksum, and license.

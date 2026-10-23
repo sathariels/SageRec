@@ -49,6 +49,13 @@ class DownloadHelperTests(unittest.TestCase):
         self.assertEqual(member, "ml-100k/u.data")
         self.assertEqual(payload, _TINY_UDATA.encode())
 
+    def test_extract_uitem_from_official_layout(self) -> None:
+        payload = b"1|Toy|01-Jan-1995||http://example|0|1\n"
+        archive = _zip_bytes("ml-100k/u.item", payload)
+        extracted, member = download.extract_uitem(archive)
+        self.assertEqual(member, "ml-100k/u.item")
+        self.assertEqual(extracted, payload)
+
     def test_extract_udata_rejects_missing_member(self) -> None:
         archive = _zip_bytes("ml-100k/README", b"hello")
         with self.assertRaises(download.MovieLensDownloadError) as ctx:

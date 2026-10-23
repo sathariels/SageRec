@@ -23,11 +23,21 @@ Machine-readable run summaries belong here.
   Optional live MovieLens 100K timing is a script flag and is not the
   committed default.
 
-- `serving_latency.json` and `.md` are the Phase 9 ADR-009 HTTP load
-  test (`GET /recommend` p50/p95/p99 and throughput). Values are
+- `serving_latency.json` and `.md` are the ADR-010 HTTP load
+  test (`GET /recommend` p50/p95/p99 and throughput for retrieval-only
+  and retrieval-plus-re-rank; protocol `serving-latency-v2`). Values are
   measured on one machine. The committed catalog is synthetic noise at
-  MovieLens 100K user/item counts, not a trained model and not a
-  ranking-quality result. Do not hand-edit them.
+  MovieLens 100K user/item counts, and the timed re-ranker is a seeded
+  synthetic MLP, not a trained MovieLens model and not a
+  ranking-quality result. Top-level `latency_ms` duplicates
+  retrieval-only. Do not hand-edit them.
+
+- `rerank_eval.json` and `.md` are the Phase 10 ADR-010 MovieLens 100K
+  comparison of retrieval-only versus retrieval plus re-rank (Recall@10,
+  NDCG@10, MAP@10). Stage 1 is single-seed implicit MF. Stage 2 is the
+  NumPy MLP fit on validation labels inside top-N. This is not a
+  GraphSAGE result and does not replace Phase 5 or the ADR-007
+  leaderboard. Do not hand-edit them.
 
 Do not invent placeholder metrics or hand-edit timings. Checkpoints and
 bulky logs stay ignored. Serving embedding artifacts under
